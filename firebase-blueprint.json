@@ -1,0 +1,98 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Information about a user.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "The user's full name." },
+        "email": { "type": "string", "format": "email", "description": "The user's email address." },
+        "role": { "type": "string", "enum": ["student", "admin"], "description": "The user's role." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "When the user was created." }
+      },
+      "required": ["name", "email", "role", "createdAt"]
+    },
+    "Admission": {
+      "title": "Admission",
+      "description": "Student admission application.",
+      "type": "object",
+      "properties": {
+        "student_name": { "type": "string", "description": "The student's full name." },
+        "father_name": { "type": "string", "description": "The student's father's name." },
+        "dob": { "type": "string", "format": "date", "description": "The student's date of birth." },
+        "gender": { "type": "string", "enum": ["male", "female"], "description": "The student's gender." },
+        "course": { "type": "string", "description": "The course applied for." },
+        "phone": { "type": "string", "description": "The student's phone number." },
+        "email": { "type": "string", "format": "email", "description": "The student's email address." },
+        "address": { "type": "string", "description": "The student's address." },
+        "document_path": { "type": "string", "description": "Path to the uploaded document in storage." },
+        "additional_info": { "type": "string", "description": "Any additional information." },
+        "submittedAt": { "type": "string", "format": "date-time", "description": "When the application was submitted." }
+      },
+      "required": ["student_name", "father_name", "dob", "gender", "course", "phone", "email", "address", "submittedAt"]
+    },
+    "Result": {
+      "title": "Result",
+      "description": "Student exam result.",
+      "type": "object",
+      "properties": {
+        "rollNumber": { "type": "string", "description": "The student's roll number." },
+        "name": { "type": "string", "description": "The student's name." },
+        "exam": { "type": "string", "description": "The exam name." },
+        "marks": { "type": "string", "description": "The marks obtained." },
+        "percentage": { "type": "string", "description": "The percentage obtained." },
+        "grade": { "type": "string", "description": "The grade obtained." },
+        "status": { "type": "string", "enum": ["Pass", "Fail"], "description": "The pass/fail status." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "When the result was created." }
+      },
+      "required": ["rollNumber", "name", "exam", "marks", "percentage", "grade", "status", "createdAt"]
+    },
+    "News": {
+      "title": "News",
+      "description": "Latest news and announcements.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "description": "The news title." },
+        "description": { "type": "string", "description": "The news description." },
+        "fullMessage": { "type": "string", "description": "The full news message." },
+        "date": { "type": "string", "description": "The date of the news." },
+        "icon": { "type": "string", "description": "The icon name for the news." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "When the news was created." }
+      },
+      "required": ["title", "description", "date", "icon", "createdAt"]
+    },
+    "Course": {
+      "title": "Course",
+      "description": "Information about a course.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "The course name." },
+        "description": { "type": "string", "description": "The course description." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "When the course was created." }
+      },
+      "required": ["name", "description", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "User" },
+      "description": "User profiles."
+    },
+    "/admissions/{admissionId}": {
+      "schema": { "$ref": "Admission" },
+      "description": "Admission applications."
+    },
+    "/results/{resultId}": {
+      "schema": { "$ref": "Result" },
+      "description": "Exam results."
+    },
+    "/news/{newsId}": {
+      "schema": { "$ref": "News" },
+      "description": "Latest news."
+    },
+    "/courses/{courseId}": {
+      "schema": { "$ref": "Course" },
+      "description": "Available courses."
+    }
+  }
+}

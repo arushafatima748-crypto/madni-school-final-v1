@@ -1,0 +1,32 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Poppins", ui-sans-serif, system-ui, sans-serif;
+  --font-amiri: "Amiri", serif;
+  --color-madni-green: #0b4d3b;
+  --color-madni-gold: #e4c580;
+  --color-madni-light-gold: #fef3c7;
+}
+
+@import url('https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Poppins:wght@300;400;500;600;700&display=swap');
+
+body {
+  @apply bg-slate-50 text-slate-900 font-sans;
+  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" opacity="0.03"><text x="50%" y="50%" font-family="Amiri" font-size="120" fill="%230b4d3b" text-anchor="middle" dominant-baseline="middle" transform="rotate(-5, 200, 200)">﷽</text></svg>');
+  background-attachment: fixed;
+}
+
+.madni-gradient {
+  background: linear-gradient(145deg, #064e3b, #0b4d3b, #065f46, #1f8a5c, #064e3b);
+  background-size: 400% 400%;
+}
+
+@keyframes gradientMove {
+  0% { background-position: 0% 0%; }
+  50% { background-position: 100% 100%; }
+  100% { background-position: 0% 0%; }
+}
+
+.animate-gradient {
+  animation: gradientMove 10s ease infinite;
+}
