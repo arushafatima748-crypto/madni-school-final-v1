@@ -498,16 +498,28 @@ export default function App() {
 
       {/* --- Hero Section --- */}
       <header id="home" className="relative py-20 overflow-hidden bg-[#fff9f0]">
+        {/* Subtle Calligraphy Background for Hero Section */}
+        <div className="absolute inset-0 opacity-[0.03] pointer-events-none select-none flex items-center justify-center overflow-hidden">
+          <span className="font-amiri text-[40rem] text-madni-green rotate-[-10deg]">﷽</span>
+        </div>
+
         <div className="max-w-7xl mx-auto px-4 text-center relative z-10">
           <motion.div 
             initial={{ scale: 0.8, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             transition={{ duration: 0.8, ease: "easeOut" }}
-            className="w-48 h-48 sm:w-64 sm:h-64 rounded-full mx-auto madni-gradient animate-gradient flex flex-col items-center justify-center p-6 shadow-2xl border-2 border-madni-gold/30"
+            className="w-48 h-48 sm:w-64 sm:h-64 rounded-full mx-auto madni-gradient animate-gradient flex flex-col items-center justify-center p-6 shadow-2xl border-2 border-madni-gold/30 relative overflow-hidden"
           >
-            <h1 className="text-2xl sm:text-3xl font-bold text-white mb-2 leading-tight">Madni School</h1>
-            <div className="w-full h-[2px] bg-madni-gold mb-2"></div>
-            <p className="font-amiri text-xl sm:text-2xl text-madni-light-gold font-bold">جامعہ فیضان حلیمہ سعدیہ</p>
+            {/* Light Calligraphy Background */}
+            <div className="absolute inset-0 opacity-10 flex items-center justify-center pointer-events-none select-none">
+              <span className="font-amiri text-[10rem] text-white rotate-[-15deg]">﷽</span>
+            </div>
+            
+            <div className="relative z-10 flex flex-col items-center">
+              <h1 className="text-2xl sm:text-3xl font-bold text-white mb-2 leading-tight">Madni School</h1>
+              <div className="w-full h-[2px] bg-madni-gold mb-2"></div>
+              <p className="font-amiri text-xl sm:text-2xl text-madni-light-gold font-bold">جامعہ فیضان حلیمہ سعدیہ</p>
+            </div>
           </motion.div>
 
           <motion.div 
