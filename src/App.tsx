@@ -320,10 +320,10 @@ export default function App() {
       if (err.code === 'auth/operation-not-allowed') {
         alert("Email/Password login is not enabled in Firebase Console. Please enable it.");
       } else if (err.code === 'auth/email-already-in-use') {
-        alert("Ye email pehle se istemal mein hai. Meherbani karke Login karein.");
+        alert("This email is already in use. Please login instead.");
         setAuthMode('login');
       } else if (err.code === 'auth/wrong-password' || err.code === 'auth/user-not-found') {
-        alert("Email ya Password ghalat hai.");
+        alert("Incorrect email or password.");
       } else {
         alert(err.message || 'Authentication failed');
       }
@@ -437,9 +437,14 @@ export default function App() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16 items-center gap-3">
             {/* Logo on Left */}
-            <div className="flex-shrink-0 cursor-pointer" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
-              <div className="w-9 h-9 rounded-full madni-gradient flex items-center justify-center text-white font-bold text-lg shadow-md border-2 border-madni-gold/20">
-                M
+            <div className="flex-shrink-0 cursor-pointer flex items-center gap-2" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
+              <div className="w-10 h-10 rounded-full madni-gradient flex items-center justify-center text-white font-bold text-xl shadow-md border-2 border-madni-gold/20 relative overflow-hidden">
+                <BookOpen className="w-6 h-6 absolute opacity-20" />
+                <span className="relative z-10">M</span>
+              </div>
+              <div className="hidden sm:flex flex-col">
+                <span className="text-madni-green font-bold text-lg leading-none">Madni</span>
+                <span className="text-madni-gold font-semibold text-xs tracking-wider">SCHOOL</span>
               </div>
             </div>
             
@@ -464,12 +469,12 @@ export default function App() {
                   if (user) {
                     setSelectedItem({ 
                       title: 'Welcome Back!', 
-                      text: `Assalam-o-Alaikum ${user.displayName || user.email}!\n\nMadni School mein khush amdeed. Aapka account active hai. Ab aap admission form bhar sakte hain aur results check kar sakte hain.` 
+                      text: `Assalam-o-Alaikum ${user.displayName || user.email}!\n\nWelcome to Madni School. Your account is active. You can now fill out the admission form and check your results.` 
                     });
                   } else {
                     setSelectedItem({ 
                       title: 'Notifications', 
-                      text: 'No new notifications at this time.\n\nMeherbani karke Login karein taake aapko personalized updates mil sakein.' 
+                      text: 'No new notifications at this time.\n\nPlease login to receive personalized updates and notifications.' 
                     });
                   }
                 }}
@@ -753,14 +758,50 @@ export default function App() {
       )}
 
       {/* --- Footer --- */}
-      <footer className="mt-auto madni-gradient animate-gradient py-12 text-white border-t-4 border-madni-gold shadow-2xl">
-        <div className="max-w-7xl mx-auto px-4 text-center">
-          <p className="text-xl font-bold mb-2">&copy; 2025 Madni School | جامعہ حلیمہ سعدیہ</p>
-          <p className="text-xs opacity-60 mb-4">v1.1 - Updated & Verified</p>
-          <div className="flex items-center justify-center gap-2 text-madni-light-gold">
-            <Heart className="w-5 h-5 fill-madni-gold" />
-            <span className="font-medium">Ilm o Adab ka markaz</span>
-            <Heart className="w-5 h-5 fill-madni-gold" />
+      <footer className="mt-auto madni-gradient animate-gradient py-16 text-white border-t-4 border-madni-gold shadow-2xl relative overflow-hidden">
+        <div className="absolute inset-0 opacity-5 pointer-events-none flex items-center justify-center">
+          <span className="font-amiri text-[30rem] rotate-[-10deg]">﷽</span>
+        </div>
+        
+        <div className="max-w-7xl mx-auto px-4 relative z-10">
+          <div className="grid md:grid-cols-3 gap-12 text-center md:text-left mb-12">
+            <div className="flex flex-col items-center md:items-start gap-4">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-full bg-white/10 backdrop-blur-sm flex items-center justify-center border-2 border-madni-gold/30">
+                  <BookOpen className="w-7 h-7 text-madni-gold" />
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-2xl font-bold tracking-tight">Madni School</span>
+                  <span className="text-madni-gold text-xs font-bold tracking-[0.2em] uppercase">Chakwal Pakistan</span>
+                </div>
+              </div>
+              <p className="text-sm text-madni-light-gold/80 max-w-xs">
+                Providing quality Islamic and modern education since 2015. HEC certified and Wifaqul Madaris affiliated.
+              </p>
+            </div>
+            
+            <div className="flex flex-col items-center gap-4">
+              <h4 className="text-lg font-bold text-madni-gold border-b-2 border-madni-gold/30 pb-2 px-4">Quick Links</h4>
+              <ul className="space-y-2 text-sm font-medium">
+                <li><button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} className="hover:text-madni-gold transition-colors">Home</button></li>
+                <li><button onClick={() => setShowAdmission(true)} className="hover:text-madni-gold transition-colors">Admissions</button></li>
+                <li><button onClick={() => setShowResult(true)} className="hover:text-madni-gold transition-colors">Results</button></li>
+              </ul>
+            </div>
+
+            <div className="flex flex-col items-center md:items-end gap-4">
+              <h4 className="text-lg font-bold text-madni-gold border-b-2 border-madni-gold/30 pb-2 px-4">Contact Us</h4>
+              <div className="text-sm space-y-2 text-center md:text-right">
+                <p>Madni Tehreek, Chakwal</p>
+                <p>Phone: +92 300 1234567</p>
+                <p>Email: info@madnischool.edu.pk</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="pt-8 border-t border-white/10 text-center">
+            <p className="text-sm font-medium opacity-80">&copy; 2025 Madni School | جامعہ حلیمہ سعدیہ</p>
+            <p className="text-[10px] opacity-40 mt-1 uppercase tracking-widest">v1.2 - Verified Production Build</p>
           </div>
         </div>
       </footer>
