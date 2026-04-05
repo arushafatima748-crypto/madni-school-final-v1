@@ -27,6 +27,31 @@ async function startServer() {
   app.use(express.urlencoded({ extended: true }));
   app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 
+  // API Routes
+  app.post("/api/send-email", async (req, res) => {
+    const { student_name, course, email } = req.body;
+    
+    const mailOptions = {
+      from: process.env.EMAIL_USER,
+      to: "arushafatima748@gmail.com",
+      subject: `New Admission: ${student_name} - ${course}`,
+      text: `A new student has applied for admission.\n\nName: ${student_name}\nCourse: ${course}\nEmail: ${email}\n\nYou can view more details in the Madni School Admin Dashboard.`,
+    };
+
+    try {
+      if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
+        await transporter.sendMail(mailOptions);
+        res.status(200).json({ message: "Email sent successfully" });
+      } else {
+        console.log("Email credentials not set. Skipping email send.");
+        res.status(200).json({ message: "Email credentials not set. Logged to console." });
+      }
+    } catch (error) {
+      console.error("Error sending email:", error);
+      res.status(500).json({ error: "Failed to send email" });
+    }
+  });
+
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({

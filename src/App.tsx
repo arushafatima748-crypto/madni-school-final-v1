@@ -29,6 +29,7 @@ import {
   Send,
   Upload,
   FileText,
+  Trash2,
   AlertCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -45,7 +46,8 @@ import {
   where,
   getDocs,
   getDoc,
-  updateDoc
+  updateDoc,
+  deleteDoc
 } from 'firebase/firestore';
 import { 
   signInWithEmailAndPassword, 
@@ -116,7 +118,7 @@ export default function App() {
   const [courses, setCourses] = useState<CourseItem[]>([
     { _id: 'default-c1', name: "Hifz-e-Quran", description: "Full Quran Memorization" },
     { _id: 'default-c2', name: "Nazra Quran", description: "Quran reading with Tajweed" },
-    { _id: 'default-c3', name: "Dars-e-Nizami", description: "8-year Alim course" }
+    { _id: 'default-c3', name: "Dars-e-Nizami", description: "8-year Alimah course" }
   ]);
   const [isLoading, setIsLoading] = useState(true);
   
@@ -290,7 +292,7 @@ export default function App() {
         const initialCourses = [
           { name: "Hifz-e-Quran", description: "Full Quran Memorization", createdAt: serverTimestamp() },
           { name: "Nazra Quran", description: "Quran reading with Tajweed", createdAt: serverTimestamp() },
-          { name: "Dars-e-Nizami", description: "8-year Alim course", createdAt: serverTimestamp() }
+          { name: "Dars-e-Nizami", description: "8-year Alimah course", createdAt: serverTimestamp() }
         ];
         for (const item of initialCourses) {
           try {
@@ -371,10 +373,11 @@ export default function App() {
         alert('Login successful!');
       } else {
         const userCred = await createUserWithEmailAndPassword(auth, authForm.email, authForm.password);
-        await updateProfile(userCred.user, { displayName: authForm.name });
+        const displayName = authForm.email === "arushafatima748@gmail.com" ? "Madni School" : authForm.name;
+        await updateProfile(userCred.user, { displayName });
         // Create user document with UID as ID
         await setDoc(doc(db, 'users', userCred.user.uid), {
-          name: authForm.name,
+          name: displayName,
           email: authForm.email,
           role: authForm.email === "arushafatima748@gmail.com" ? 'admin' : 'student',
           createdAt: serverTimestamp()
@@ -558,6 +561,19 @@ export default function App() {
     }
   };
 
+  const handleDeleteAdmission = async (id: string) => {
+    if (!isAdmin) return;
+    if (!window.confirm("Are you sure you want to delete this admission?")) return;
+    
+    try {
+      await deleteDoc(doc(db, 'admissions', id));
+      alert("Admission deleted successfully");
+    } catch (err) {
+      console.error("Error deleting admission:", err);
+      alert("Failed to delete admission");
+    }
+  };
+
   return (
     <div className="min-h-screen flex flex-col">
       {/* --- Navigation Bar --- */}
@@ -615,7 +631,9 @@ export default function App() {
               {user ? (
                 <div className="flex items-center gap-2">
                   <div className="hidden sm:flex flex-col items-end">
-                    <span className="text-sm font-bold text-madni-green">{user.displayName || user.email}</span>
+                    <span className="text-sm font-bold text-madni-green">
+                      {user.email === "arushafatima748@gmail.com" ? "Madni School" : (user.displayName || user.email)}
+                    </span>
                     {userProfile?.selectedCourse && (
                       <span className="text-[10px] font-bold text-madni-gold uppercase tracking-tighter">Course: {userProfile.selectedCourse}</span>
                     )}
@@ -642,6 +660,15 @@ export default function App() {
         </div>
 
         <div className="max-w-7xl mx-auto px-4 text-center relative z-10">
+          {isAdmin && (
+            <motion.div 
+              initial={{ y: -20, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              className="mb-6 inline-block bg-madni-gold/20 px-6 py-2 rounded-full border border-madni-gold/30 backdrop-blur-sm"
+            >
+              <span className="text-madni-green font-bold text-sm">Welcome back, Madni School Admin</span>
+            </motion.div>
+          )}
           <motion.div 
             initial={{ scale: 0.8, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
@@ -754,7 +781,7 @@ export default function App() {
                 color: 'bg-blue-100 text-blue-800',
                 action: () => setSelectedItem({ 
                   title: 'Dars-e-Nizami', 
-                  text: 'The Alim Course (Dars-e-Nizami) is an 8-year comprehensive study of Islamic sciences, including Arabic grammar, Fiqh, Hadith, and Tafseer.' 
+                  text: 'The Alimah Course (Dars-e-Nizami) is an 8-year comprehensive study of Islamic sciences, including Arabic grammar, Fiqh, Hadith, and Tafseer.' 
                 })
               },
               { 
@@ -1094,7 +1121,7 @@ export default function App() {
                                   const initialCourses = [
                                     { name: "Hifz-e-Quran", description: "Full Quran Memorization", createdAt: serverTimestamp() },
                                     { name: "Nazra Quran", description: "Quran reading with Tajweed", createdAt: serverTimestamp() },
-                                    { name: "Dars-e-Nizami", description: "8-year Alim course", createdAt: serverTimestamp() }
+                                    { name: "Dars-e-Nizami", description: "8-year Alimah course", createdAt: serverTimestamp() }
                                   ];
                                   for (const item of initialCourses) {
                                     await addDoc(collection(db, 'courses'), item);
@@ -1246,6 +1273,7 @@ export default function App() {
                         <th className="p-3 text-sm">Phone</th>
                         <th className="p-3 text-sm">Address</th>
                         <th className="p-3 text-sm">Date</th>
+                        <th className="p-3 text-sm text-center">Action</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1259,10 +1287,19 @@ export default function App() {
                           <td className="p-3 text-sm text-slate-400">
                             {adm.submittedAt?.toDate().toLocaleDateString() || 'Pending'}
                           </td>
+                          <td className="p-3 text-center">
+                            <button 
+                              onClick={() => handleDeleteAdmission(adm.id)}
+                              className="p-2 text-red-500 hover:bg-red-50 rounded-full transition-colors"
+                              title="Delete Admission"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </td>
                         </tr>
                       )) : (
                         <tr>
-                          <td colSpan={6} className="p-10 text-center text-slate-400 italic">No admissions yet.</td>
+                          <td colSpan={7} className="p-10 text-center text-slate-400 italic">No admissions yet.</td>
                         </tr>
                       )}
                     </tbody>
