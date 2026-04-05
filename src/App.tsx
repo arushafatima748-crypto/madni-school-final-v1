@@ -43,7 +43,9 @@ import {
   doc,
   serverTimestamp,
   where,
-  getDocs
+  getDocs,
+  getDoc,
+  updateDoc
 } from 'firebase/firestore';
 import { 
   signInWithEmailAndPassword, 
@@ -138,13 +140,40 @@ export default function App() {
   const [newNews, setNewNews] = useState({ title: '', description: '', icon: 'newspaper' });
   const [newCourse, setNewCourse] = useState({ name: '', description: '' });
   const [isSubmittingAdmin, setIsSubmittingAdmin] = useState(false);
+  const [showCourseSelection, setShowCourseSelection] = useState(false);
+  const [userProfile, setUserProfile] = useState<any>(null);
+
+  const checkUserProfile = async (currentUser: any) => {
+    if (!currentUser) return;
+    try {
+      const userRef = doc(db, 'users', currentUser.uid);
+      const userDoc = await getDoc(userRef);
+      if (userDoc.exists()) {
+        const data = userDoc.data();
+        setUserProfile(data);
+        // Show course selection if not an admin and no course selected
+        if (!data.selectedCourse && currentUser.email !== "arushafatima748@gmail.com") {
+          setShowCourseSelection(true);
+        }
+      }
+    } catch (error) {
+      console.error("Error fetching user profile:", error);
+    }
+  };
 
   // --- Firebase Listeners ---
   useEffect(() => {
     document.title = "Madni School";
-    const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
+    const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
       setUser(user);
       setIsAdmin(user?.email === "arushafatima748@gmail.com");
+      
+      if (user) {
+        await checkUserProfile(user);
+      } else {
+        setUserProfile(null);
+        setShowCourseSelection(false);
+      }
     });
 
     const qNews = query(collection(db, 'news'), orderBy('createdAt', 'desc'));
@@ -284,6 +313,7 @@ export default function App() {
       
       alert('Login successful with Google!');
       setShowAuthModal(false);
+      await checkUserProfile(user);
     } catch (err: any) {
       console.error("Auth Error:", err);
       if (err.code === 'auth/unauthorized-domain') {
@@ -315,6 +345,9 @@ export default function App() {
         alert('Signup successful!');
       }
       setShowAuthModal(false);
+      if (auth.currentUser) {
+        await checkUserProfile(auth.currentUser);
+      }
     } catch (err: any) {
       console.error("Auth Error:", err);
       if (err.code === 'auth/operation-not-allowed') {
@@ -336,6 +369,22 @@ export default function App() {
       alert('Logged out');
     } catch (err) {
       alert('Logout failed');
+    }
+  };
+
+  // --- Course Selection Handler ---
+  const handleSelectCourse = async (courseName: string) => {
+    if (!user) return;
+    try {
+      await updateDoc(doc(db, 'users', user.uid), {
+        selectedCourse: courseName,
+        updatedAt: serverTimestamp()
+      });
+      setUserProfile((prev: any) => ({ ...prev, selectedCourse: courseName }));
+      setShowCourseSelection(false);
+      alert(`You have successfully selected: ${courseName}`);
+    } catch (err) {
+      alert('Failed to select course. Please try again.');
     }
   };
 
@@ -486,7 +535,12 @@ export default function App() {
               
               {user ? (
                 <div className="flex items-center gap-2">
-                  <span className="hidden sm:block text-sm font-medium text-madni-green">{user.displayName || user.email}</span>
+                  <div className="hidden sm:flex flex-col items-end">
+                    <span className="text-sm font-bold text-madni-green">{user.displayName || user.email}</span>
+                    {userProfile?.selectedCourse && (
+                      <span className="text-[10px] font-bold text-madni-gold uppercase tracking-tighter">Course: {userProfile.selectedCourse}</span>
+                    )}
+                  </div>
                   <button onClick={handleLogout} className="p-2 text-amber-700 hover:bg-amber-50 rounded-full transition-colors">
                     <LogOut className="w-6 h-6" />
                   </button>
@@ -808,6 +862,44 @@ export default function App() {
 
       {/* --- Modals --- */}
       
+      {/* Course Selection Modal */}
+      <AnimatePresence>
+        {showCourseSelection && (
+          <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-black/60 backdrop-blur-md" />
+            <motion.div initial={{ scale: 0.9, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.9, opacity: 0, y: 20 }} className="bg-white rounded-[2.5rem] p-8 max-w-lg w-full shadow-2xl border-4 border-madni-gold relative z-10">
+              <div className="text-center mb-8">
+                <div className="w-20 h-20 rounded-full madni-gradient mx-auto mb-4 flex items-center justify-center text-white border-4 border-madni-gold/30">
+                  <BookOpen className="w-10 h-10" />
+                </div>
+                <h3 className="text-3xl font-bold text-madni-green">Select Your Course</h3>
+                <p className="text-slate-600 mt-2">Please choose the course you are interested in to continue.</p>
+              </div>
+              
+              <div className="grid gap-4">
+                {courses.map((course) => (
+                  <button
+                    key={course._id}
+                    onClick={() => handleSelectCourse(course.name)}
+                    className="group p-5 rounded-2xl border-2 border-slate-100 hover:border-madni-gold hover:bg-madni-light-gold transition-all text-left flex items-center justify-between"
+                  >
+                    <div>
+                      <h4 className="font-bold text-madni-green group-hover:text-madni-green">{course.name}</h4>
+                      <p className="text-sm text-slate-500">{course.description}</p>
+                    </div>
+                    <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-madni-gold" />
+                  </button>
+                ))}
+              </div>
+              
+              <p className="text-center text-xs text-slate-400 mt-8 italic">
+                You can change your course later from your profile.
+              </p>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
       {/* Admin Panel Modal */}
       <AnimatePresence>
         {showAdminPanel && (
