@@ -118,7 +118,8 @@ export default function App() {
   const [courses, setCourses] = useState<CourseItem[]>([
     { _id: 'default-c1', name: "Hifz-e-Quran", description: "Full Quran Memorization" },
     { _id: 'default-c2', name: "Nazra Quran", description: "Quran reading with Tajweed" },
-    { _id: 'default-c3', name: "Dars-e-Nizami", description: "8-year Alimah course" }
+    { _id: 'default-c3', name: "Dars-e-Nizami", description: "8-year Alimah course" },
+    { _id: 'default-c4', name: "Modern Education", description: "Schooling from Playgroup to Class 10" }
   ]);
   const [isLoading, setIsLoading] = useState(true);
   
@@ -126,7 +127,7 @@ export default function App() {
   const [showAdmission, setShowAdmission] = useState(false);
   const [admissionForm, setAdmissionForm] = useState({
     student_name: '', father_name: '', dob: '', gender: 'male', course: 'Hifz Program',
-    phone: '', email: '', address: '', additional_info: ''
+    phone: '', email: '', address: '', additional_info: '', selectedClass: ''
   });
   const [admissionFile, setAdmissionFile] = useState<File | null>(null);
   
@@ -218,8 +219,10 @@ export default function App() {
     const qCourses = query(collection(db, 'courses'), orderBy('createdAt', 'desc'));
     const unsubscribeCourses = onSnapshot(qCourses, (snapshot) => {
       console.log("Courses snapshot received, size:", snapshot.size);
-      const coursesData = snapshot.docs.map(doc => ({ _id: doc.id, ...doc.data() } as CourseItem));
-      setCourses(coursesData);
+      if (!snapshot.empty) {
+        const coursesData = snapshot.docs.map(doc => ({ _id: doc.id, ...doc.data() } as CourseItem));
+        setCourses(coursesData);
+      }
       setIsCoursesLoading(false);
     }, (error) => {
       console.error("Courses fetch error:", error);
@@ -292,7 +295,8 @@ export default function App() {
         const initialCourses = [
           { name: "Hifz-e-Quran", description: "Full Quran Memorization", createdAt: serverTimestamp() },
           { name: "Nazra Quran", description: "Quran reading with Tajweed", createdAt: serverTimestamp() },
-          { name: "Dars-e-Nizami", description: "8-year Alimah course", createdAt: serverTimestamp() }
+          { name: "Dars-e-Nizami", description: "8-year Alimah course", createdAt: serverTimestamp() },
+          { name: "Modern Education", description: "Schooling from Playgroup to Class 10", createdAt: serverTimestamp() }
         ];
         for (const item of initialCourses) {
           try {
@@ -447,6 +451,7 @@ export default function App() {
       setAdmissionForm(prev => ({
         ...prev,
         course: courseName,
+        selectedClass: '',
         student_name: activeUser.displayName || prev.student_name,
         email: activeUser.email || prev.email
       }));
@@ -485,7 +490,7 @@ export default function App() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             student_name: admissionForm.student_name,
-            course: admissionForm.course,
+            course: admissionForm.course + (admissionForm.selectedClass ? ` (${admissionForm.selectedClass})` : ''),
             email: admissionForm.email
           })
         });
@@ -498,7 +503,7 @@ export default function App() {
       setIsFromCourseSelection(false);
       setAdmissionForm({
         student_name: '', father_name: '', dob: '', gender: 'male', course: 'Hifz Program',
-        phone: '', email: '', address: '', additional_info: ''
+        phone: '', email: '', address: '', additional_info: '', selectedClass: ''
       });
       setAdmissionFile(null);
     } catch (err: any) {
@@ -1121,7 +1126,8 @@ export default function App() {
                                   const initialCourses = [
                                     { name: "Hifz-e-Quran", description: "Full Quran Memorization", createdAt: serverTimestamp() },
                                     { name: "Nazra Quran", description: "Quran reading with Tajweed", createdAt: serverTimestamp() },
-                                    { name: "Dars-e-Nizami", description: "8-year Alimah course", createdAt: serverTimestamp() }
+                                    { name: "Dars-e-Nizami", description: "8-year Alimah course", createdAt: serverTimestamp() },
+                                    { name: "Modern Education", description: "Schooling from Playgroup to Class 10", createdAt: serverTimestamp() }
                                   ];
                                   for (const item of initialCourses) {
                                     await addDoc(collection(db, 'courses'), item);
@@ -1281,7 +1287,12 @@ export default function App() {
                         <tr key={adm.id} className="border-b hover:bg-slate-50 transition-colors">
                           <td className="p-3 text-sm font-bold text-madni-green">{adm.student_name}</td>
                           <td className="p-3 text-sm text-slate-600">{adm.father_name}</td>
-                          <td className="p-3 text-sm font-medium">{adm.course}</td>
+                          <td className="p-3 text-sm font-medium">
+                            {adm.course}
+                            {adm.selectedClass && (
+                              <span className="block text-[10px] text-madni-gold font-bold uppercase">Class: {adm.selectedClass}</span>
+                            )}
+                          </td>
                           <td className="p-3 text-sm text-slate-600">{adm.phone}</td>
                           <td className="p-3 text-sm text-slate-500 truncate max-w-[150px]">{adm.address}</td>
                           <td className="p-3 text-sm text-slate-400">
@@ -1387,13 +1398,45 @@ export default function App() {
                     <option value="male">Male</option>
                     <option value="female">Female</option>
                   </select>
-                  <select className="w-full px-4 py-3 rounded-xl border-2 border-slate-200 focus:border-madni-gold outline-none" value={admissionForm.course} onChange={e => setAdmissionForm({...admissionForm, course: e.target.value})}>
-                    {courses.map(c => (
-                      <option key={c._id} value={c.name}>{c.name}</option>
-                    ))}
-                    <option value="Modern Education (Playgroup)">Modern Education (Playgroup)</option>
-                    <option value="Modern Education (Class 1-5)">Modern Education (Class 1-5)</option>
-                  </select>
+                  <div className="md:col-span-2">
+                    <label className="block text-xs font-bold text-madni-green mb-1 ml-1 uppercase">Select Course</label>
+                    <select 
+                      className="w-full px-4 py-3 rounded-xl border-2 border-slate-200 focus:border-madni-gold outline-none bg-white" 
+                      value={admissionForm.course} 
+                      onChange={e => setAdmissionForm({...admissionForm, course: e.target.value, selectedClass: ''})}
+                    >
+                      {courses.map(c => (
+                        <option key={c._id} value={c.name}>{c.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  
+                  {admissionForm.course.toLowerCase().includes("modern education") && (
+                    <div className="md:col-span-2 animate-in fade-in slide-in-from-top-2 duration-300">
+                      <label className="block text-xs font-bold text-madni-gold mb-1 ml-1 uppercase">Select Class (Required for Modern Education)</label>
+                      <select 
+                        className="w-full px-4 py-3 rounded-xl border-2 border-madni-gold bg-madni-light-gold/30 outline-none font-bold text-madni-green" 
+                        value={admissionForm.selectedClass} 
+                        onChange={e => setAdmissionForm({...admissionForm, selectedClass: e.target.value})}
+                        required
+                      >
+                        <option value="">-- Choose Class --</option>
+                        <option value="Playgroup">Playgroup</option>
+                        <option value="Nursery">Nursery</option>
+                        <option value="Prep">Prep</option>
+                        <option value="Class 1">Class 1</option>
+                        <option value="Class 2">Class 2</option>
+                        <option value="Class 3">Class 3</option>
+                        <option value="Class 4">Class 4</option>
+                        <option value="Class 5">Class 5</option>
+                        <option value="Class 6">Class 6</option>
+                        <option value="Class 7">Class 7</option>
+                        <option value="Class 8">Class 8</option>
+                        <option value="Class 9">Class 9</option>
+                        <option value="Class 10">Class 10</option>
+                      </select>
+                    </div>
+                  )}
                   <input type="tel" placeholder="Phone Number" className="w-full px-4 py-3 rounded-xl border-2 border-slate-200 focus:border-madni-gold outline-none" value={admissionForm.phone} onChange={e => setAdmissionForm({...admissionForm, phone: e.target.value})} required />
                   <input type="email" placeholder="Email" className="w-full px-4 py-3 rounded-xl border-2 border-slate-200 focus:border-madni-gold outline-none" value={admissionForm.email} onChange={e => setAdmissionForm({...admissionForm, email: e.target.value})} required />
                   <input type="text" placeholder="Address" className="w-full px-4 py-3 rounded-xl border-2 border-slate-200 focus:border-madni-gold outline-none" value={admissionForm.address} onChange={e => setAdmissionForm({...admissionForm, address: e.target.value})} required />

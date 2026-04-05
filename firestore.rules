@@ -121,7 +121,10 @@ service cloud.firestore {
              data.father_name is string && data.father_name.size() > 0 && data.father_name.size() < 100 &&
              isValidEmail(data.email) &&
              data.gender in ['male', 'female'] &&
-             data.submittedAt is timestamp;
+             data.submittedAt is timestamp &&
+             (!('selectedClass' in data) || data.selectedClass is string) &&
+             (!('uid' in data) || data.uid == null || data.uid is string) &&
+             (!('additional_info' in data) || data.additional_info is string);
     }
 
     function isValidResult(data) {
