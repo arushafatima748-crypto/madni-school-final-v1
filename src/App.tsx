@@ -142,6 +142,7 @@ export default function App() {
   const [isSubmittingAdmin, setIsSubmittingAdmin] = useState(false);
   const [showCourseSelection, setShowCourseSelection] = useState(false);
   const [userProfile, setUserProfile] = useState<any>(null);
+  const [selectionSuccess, setSelectionSuccess] = useState(false);
 
   const checkUserProfile = async (currentUser: any) => {
     if (!currentUser) return;
@@ -381,8 +382,7 @@ export default function App() {
         updatedAt: serverTimestamp()
       });
       setUserProfile((prev: any) => ({ ...prev, selectedCourse: courseName }));
-      setShowCourseSelection(false);
-      alert(`You have successfully selected: ${courseName}`);
+      setSelectionSuccess(true);
     } catch (err) {
       alert('Failed to select course. Please try again.');
     }
@@ -868,33 +868,54 @@ export default function App() {
           <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-black/60 backdrop-blur-md" />
             <motion.div initial={{ scale: 0.9, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.9, opacity: 0, y: 20 }} className="bg-white rounded-[2.5rem] p-8 max-w-lg w-full shadow-2xl border-4 border-madni-gold relative z-10">
-              <div className="text-center mb-8">
-                <div className="w-20 h-20 rounded-full madni-gradient mx-auto mb-4 flex items-center justify-center text-white border-4 border-madni-gold/30">
-                  <BookOpen className="w-10 h-10" />
-                </div>
-                <h3 className="text-3xl font-bold text-madni-green">Select Your Course</h3>
-                <p className="text-slate-600 mt-2">Please choose the course you are interested in to continue.</p>
-              </div>
-              
-              <div className="grid gap-4">
-                {courses.map((course) => (
-                  <button
-                    key={course._id}
-                    onClick={() => handleSelectCourse(course.name)}
-                    className="group p-5 rounded-2xl border-2 border-slate-100 hover:border-madni-gold hover:bg-madni-light-gold transition-all text-left flex items-center justify-between"
+              {selectionSuccess ? (
+                <div className="text-center py-8">
+                  <div className="w-24 h-24 rounded-full bg-emerald-100 mx-auto mb-6 flex items-center justify-center text-emerald-600 border-4 border-emerald-200">
+                    <CheckCircle className="w-12 h-12" />
+                  </div>
+                  <h3 className="text-3xl font-bold text-madni-green mb-4">Congratulations!</h3>
+                  <p className="text-slate-700 text-lg leading-relaxed mb-8">
+                    Your selection for <span className="font-bold text-madni-gold">{userProfile?.selectedCourse}</span> has been recorded.<br/><br/>
+                    Student admission process in <span className="font-bold">Jamia Halima Sadia</span> is now being processed.
+                  </p>
+                  <button 
+                    onClick={() => { setShowCourseSelection(false); setSelectionSuccess(false); }}
+                    className="w-full bg-madni-green text-white py-4 rounded-full font-bold border-2 border-madni-gold hover:bg-madni-gold hover:text-madni-green transition-all shadow-lg"
                   >
-                    <div>
-                      <h4 className="font-bold text-madni-green group-hover:text-madni-green">{course.name}</h4>
-                      <p className="text-sm text-slate-500">{course.description}</p>
-                    </div>
-                    <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-madni-gold" />
+                    Continue to Dashboard
                   </button>
-                ))}
-              </div>
-              
-              <p className="text-center text-xs text-slate-400 mt-8 italic">
-                You can change your course later from your profile.
-              </p>
+                </div>
+              ) : (
+                <>
+                  <div className="text-center mb-8">
+                    <div className="w-20 h-20 rounded-full madni-gradient mx-auto mb-4 flex items-center justify-center text-white border-4 border-madni-gold/30">
+                      <BookOpen className="w-10 h-10" />
+                    </div>
+                    <h3 className="text-3xl font-bold text-madni-green">Select Your Course</h3>
+                    <p className="text-slate-600 mt-2">Please choose the course you are interested in to continue.</p>
+                  </div>
+                  
+                  <div className="grid gap-4">
+                    {courses.map((course) => (
+                      <button
+                        key={course._id}
+                        onClick={() => handleSelectCourse(course.name)}
+                        className="group p-5 rounded-2xl border-2 border-slate-100 hover:border-madni-gold hover:bg-madni-light-gold transition-all text-left flex items-center justify-between"
+                      >
+                        <div>
+                          <h4 className="font-bold text-madni-green group-hover:text-madni-green">{course.name}</h4>
+                          <p className="text-sm text-slate-500">{course.description}</p>
+                        </div>
+                        <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-madni-gold" />
+                      </button>
+                    ))}
+                  </div>
+                  
+                  <p className="text-center text-xs text-slate-400 mt-8 italic">
+                    You can change your course later from your profile.
+                  </p>
+                </>
+              )}
             </motion.div>
           </div>
         )}
