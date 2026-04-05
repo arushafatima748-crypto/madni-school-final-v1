@@ -944,50 +944,44 @@ export default function App() {
       )}
 
       {/* --- Footer --- */}
-      <footer className="mt-auto madni-gradient animate-gradient py-16 text-white border-t-4 border-madni-gold shadow-2xl relative overflow-hidden">
-        <div className="absolute inset-0 opacity-5 pointer-events-none flex items-center justify-center">
-          <span className="font-amiri text-[30rem] rotate-[-10deg]">﷽</span>
-        </div>
-        
+      <footer className="mt-auto madni-gradient animate-gradient py-6 text-white border-t-4 border-madni-gold shadow-2xl relative overflow-hidden">
         <div className="max-w-7xl mx-auto px-4 relative z-10">
-          <div className="grid md:grid-cols-3 gap-12 text-center md:text-left mb-12">
-            <div className="flex flex-col items-center md:items-start gap-4">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-full bg-white/10 backdrop-blur-sm flex items-center justify-center border-2 border-madni-gold/30">
-                  <BookOpen className="w-7 h-7 text-madni-gold" />
+          <div className="flex flex-wrap justify-center gap-2 mb-6 opacity-20 font-amiri text-lg tracking-[0.5em] select-none">
+            أ ب ت ث ج ح خ د ذ ر ز س ش ص ض ط ظ ع غ ف ق ك ل م ن ه و ي
+          </div>
+
+          <div className="grid md:grid-cols-3 gap-6 text-center md:text-left mb-4">
+            <div className="flex flex-col items-center md:items-start gap-2">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-full bg-white/10 backdrop-blur-sm flex items-center justify-center border border-madni-gold/30">
+                  <BookOpen className="w-5 h-5 text-madni-gold" />
                 </div>
-                <div className="flex flex-col">
-                  <span className="text-2xl font-bold tracking-tight">Madni School</span>
-                  <span className="text-madni-gold text-xs font-bold tracking-[0.2em] uppercase">Chakwal Pakistan</span>
-                </div>
+                <span className="text-lg font-bold tracking-tight">Madni School</span>
               </div>
-              <p className="text-sm text-madni-light-gold/80 max-w-xs">
-                Providing quality Islamic and modern education since 2015. HEC certified and Wifaqul Madaris affiliated.
+              <p className="text-[10px] text-madni-light-gold/80 max-w-xs">
+                Quality Islamic and modern education since 2015. HEC certified.
               </p>
             </div>
             
-            <div className="flex flex-col items-center gap-4">
-              <h4 className="text-lg font-bold text-madni-gold border-b-2 border-madni-gold/30 pb-2 px-4">Quick Links</h4>
-              <ul className="space-y-2 text-sm font-medium">
+            <div className="flex flex-col items-center gap-2">
+              <ul className="flex gap-4 text-[10px] font-bold uppercase tracking-wider">
                 <li><button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} className="hover:text-madni-gold transition-colors">Home</button></li>
                 <li><button onClick={() => setShowAdmission(true)} className="hover:text-madni-gold transition-colors">Admissions</button></li>
                 <li><button onClick={() => setShowResult(true)} className="hover:text-madni-gold transition-colors">Results</button></li>
               </ul>
             </div>
 
-            <div className="flex flex-col items-center md:items-end gap-4">
-              <h4 className="text-lg font-bold text-madni-gold border-b-2 border-madni-gold/30 pb-2 px-4">Contact Us</h4>
-              <div className="text-sm space-y-2 text-center md:text-right">
-                <p>Madni Tehreek, Chakwal</p>
-                <p>Phone: +92 300 1234567</p>
-                <p>Email: info@madnischool.edu.pk</p>
+            <div className="flex flex-col items-center md:items-end gap-1">
+              <div className="text-[10px] space-y-0.5 text-center md:text-right opacity-80">
+                <p>Chakwal, Pakistan</p>
+                <p>+92 300 1234567</p>
+                <p>info@madnischool.edu.pk</p>
               </div>
             </div>
           </div>
 
-          <div className="pt-8 border-t border-white/10 text-center">
-            <p className="text-sm font-medium opacity-80">&copy; 2025 Madni School | جامعہ حلیمہ سعدیہ</p>
-            <p className="text-[10px] opacity-40 mt-1 uppercase tracking-widest">v1.2 - Verified Production Build</p>
+          <div className="pt-3 border-t border-white/10 text-center">
+            <p className="text-[10px] font-medium opacity-60">&copy; 2025 Madni School | جامعہ حلیمہ سعدیہ</p>
           </div>
         </div>
       </footer>
@@ -1231,29 +1225,33 @@ export default function App() {
                 <h4 className="font-bold text-madni-green mb-4 flex items-center gap-2">
                   <UserPlus className="w-5 h-5" /> Recent Admissions
                 </h4>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse">
+                <div className="overflow-x-auto rounded-xl border border-slate-200 shadow-sm">
+                  <table className="w-full text-left border-collapse min-w-[800px]">
                     <thead>
                       <tr className="bg-madni-green text-white">
-                        <th className="p-3 rounded-tl-xl">Student</th>
-                        <th className="p-3">Course</th>
-                        <th className="p-3">Phone</th>
-                        <th className="p-3 rounded-tr-xl">Date</th>
+                        <th className="p-3 text-sm">Student</th>
+                        <th className="p-3 text-sm">Father Name</th>
+                        <th className="p-3 text-sm">Course</th>
+                        <th className="p-3 text-sm">Phone</th>
+                        <th className="p-3 text-sm">Address</th>
+                        <th className="p-3 text-sm">Date</th>
                       </tr>
                     </thead>
                     <tbody>
                       {admissions.length > 0 ? admissions.map((adm) => (
-                        <tr key={adm.id} className="border-b hover:bg-slate-50">
-                          <td className="p-3 font-medium">{adm.student_name}</td>
-                          <td className="p-3">{adm.course}</td>
-                          <td className="p-3">{adm.phone}</td>
-                          <td className="p-3 text-sm text-slate-500">
+                        <tr key={adm.id} className="border-b hover:bg-slate-50 transition-colors">
+                          <td className="p-3 text-sm font-bold text-madni-green">{adm.student_name}</td>
+                          <td className="p-3 text-sm text-slate-600">{adm.father_name}</td>
+                          <td className="p-3 text-sm font-medium">{adm.course}</td>
+                          <td className="p-3 text-sm text-slate-600">{adm.phone}</td>
+                          <td className="p-3 text-sm text-slate-500 truncate max-w-[150px]">{adm.address}</td>
+                          <td className="p-3 text-sm text-slate-400">
                             {adm.submittedAt?.toDate().toLocaleDateString() || 'Pending'}
                           </td>
                         </tr>
                       )) : (
                         <tr>
-                          <td colSpan={4} className="p-10 text-center text-slate-400 italic">No admissions yet.</td>
+                          <td colSpan={6} className="p-10 text-center text-slate-400 italic">No admissions yet.</td>
                         </tr>
                       )}
                     </tbody>
