@@ -934,13 +934,18 @@ export default function App() {
 
       {/* --- Admin Panel Button (Floating) --- */}
       {isAdmin && (
-        <button 
+        <motion.button 
+          initial={{ scale: 0 }}
+          animate={{ scale: 1 }}
+          whileHover={{ scale: 1.1 }}
+          whileTap={{ scale: 0.9 }}
           onClick={() => setShowAdminPanel(true)}
-          className="fixed bottom-24 right-6 z-40 bg-madni-green text-white p-4 rounded-full shadow-2xl border-2 border-madni-gold hover:scale-110 transition-all flex items-center gap-2"
+          className="fixed bottom-24 right-6 z-[100] bg-madni-green text-white px-6 py-4 rounded-full shadow-[0_0_20px_rgba(30,70,59,0.3)] border-2 border-madni-gold flex items-center gap-3 group overflow-hidden"
         >
-          <Trophy className="w-6 h-6" />
-          <span className="font-bold">Admin Panel</span>
-        </button>
+          <div className="absolute inset-0 bg-white/10 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-500" />
+          <Trophy className="w-6 h-6 text-madni-gold animate-pulse" />
+          <span className="font-bold tracking-wide">Admin Dashboard</span>
+        </motion.button>
       )}
 
       {/* --- Footer --- */}
@@ -982,6 +987,7 @@ export default function App() {
 
           <div className="pt-3 border-t border-white/10 text-center">
             <p className="text-[10px] font-medium opacity-60">&copy; 2025 Madni School | جامعہ حلیمہ سعدیہ</p>
+            <p className="text-[8px] opacity-30 mt-0.5 uppercase tracking-widest">Last Updated: April 2026</p>
           </div>
         </div>
       </footer>
@@ -1125,7 +1131,12 @@ export default function App() {
             <motion.div initial={{ scale: 0.9, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.9, opacity: 0, y: 20 }} className="bg-white rounded-[2rem] p-8 max-w-4xl w-full shadow-2xl border-4 border-madni-gold relative z-10 max-h-[90vh] overflow-y-auto">
               <div className="flex justify-between items-center mb-6">
                 <h3 className="text-2xl font-bold text-madni-green">Admin Control Panel</h3>
-                <button onClick={() => setShowAdminPanel(false)} className="p-2 hover:bg-slate-100 rounded-full"><X /></button>
+                <div className="flex items-center gap-4">
+                  <div className="bg-madni-gold/20 px-4 py-1 rounded-full border border-madni-gold/30">
+                    <span className="text-xs font-bold text-madni-green">Total Admissions: {admissions.length}</span>
+                  </div>
+                  <button onClick={() => setShowAdminPanel(false)} className="p-2 hover:bg-slate-100 rounded-full"><X /></button>
+                </div>
               </div>
 
               <div className="grid md:grid-cols-2 gap-8">
