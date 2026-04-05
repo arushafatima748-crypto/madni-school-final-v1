@@ -49,8 +49,10 @@ import {
   signInWithEmailAndPassword, 
   createUserWithEmailAndPassword, 
   signOut,
-  updateProfile
-} from 'firebase/auth';
+  updateProfile,
+  signInWithPopup,
+  googleProvider
+} from './lib/firebase';
 
 // --- Types ---
 interface NewsItem {
@@ -86,6 +88,7 @@ export default function App() {
   
   // Auth State
   const [user, setUser] = useState<FirebaseUser | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
   const [showPassword, setShowPassword] = useState(false);
@@ -129,10 +132,19 @@ export default function App() {
   const [examType, setExamType] = useState('');
   const [resultData, setResultData] = useState<ResultData | null>(null);
 
+  // Admin Panel State
+  const [admissions, setAdmissions] = useState<any[]>([]);
+  const [showAdminPanel, setShowAdminPanel] = useState(false);
+  const [newNews, setNewNews] = useState({ title: '', description: '', icon: 'newspaper' });
+  const [newCourse, setNewCourse] = useState({ name: '', description: '' });
+  const [isSubmittingAdmin, setIsSubmittingAdmin] = useState(false);
+
   // --- Firebase Listeners ---
   useEffect(() => {
+    document.title = "Madni School";
     const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
       setUser(user);
+      setIsAdmin(user?.email === "arushafatima748@gmail.com");
     });
 
     const qNews = query(collection(db, 'news'), orderBy('createdAt', 'desc'));
@@ -161,6 +173,19 @@ export default function App() {
       unsubscribeCourses();
     };
   }, []);
+
+  // --- Admin Data Listener ---
+  useEffect(() => {
+    if (!isAdmin) return;
+
+    const qAdmissions = query(collection(db, 'admissions'), orderBy('submittedAt', 'desc'));
+    const unsubscribeAdmissions = onSnapshot(qAdmissions, (snapshot) => {
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setAdmissions(data);
+    });
+
+    return () => unsubscribeAdmissions();
+  }, [isAdmin]);
 
   // --- Seed Data (First Run) ---
   useEffect(() => {
@@ -241,6 +266,36 @@ export default function App() {
   }, [searchQuery, courses]);
 
   // --- Auth Handlers ---
+  const handleGoogleLogin = async () => {
+    try {
+      const result = await signInWithPopup(auth, googleProvider);
+      const user = result.user;
+      
+      // Check if user document exists, if not create it
+      const userDoc = await getDocs(query(collection(db, 'users'), where('email', '==', user.email)));
+      if (userDoc.empty) {
+        await setDoc(doc(db, 'users', user.uid), {
+          name: user.displayName || 'Anonymous',
+          email: user.email,
+          role: user.email === "arushafatima748@gmail.com" ? 'admin' : 'student',
+          createdAt: serverTimestamp()
+        });
+      }
+      
+      alert('Login successful with Google!');
+      setShowAuthModal(false);
+    } catch (err: any) {
+      console.error("Auth Error:", err);
+      if (err.code === 'auth/unauthorized-domain') {
+        alert("This domain is not authorized in Firebase Console. Please add your Vercel URL to Authorized Domains in Firebase.");
+      } else if (err.code === 'auth/operation-not-allowed') {
+        alert("Google Sign-in is not enabled in Firebase Console. Please enable it.");
+      } else {
+        alert(err.message || 'Google Authentication failed');
+      }
+    }
+  };
+
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -254,14 +309,24 @@ export default function App() {
         await setDoc(doc(db, 'users', userCred.user.uid), {
           name: authForm.name,
           email: authForm.email,
-          role: 'student',
+          role: authForm.email === "arushafatima748@gmail.com" ? 'admin' : 'student',
           createdAt: serverTimestamp()
         });
         alert('Signup successful!');
       }
       setShowAuthModal(false);
     } catch (err: any) {
-      alert(err.message || 'Authentication failed');
+      console.error("Auth Error:", err);
+      if (err.code === 'auth/operation-not-allowed') {
+        alert("Email/Password login is not enabled in Firebase Console. Please enable it.");
+      } else if (err.code === 'auth/email-already-in-use') {
+        alert("Ye email pehle se istemal mein hai. Meherbani karke Login karein.");
+        setAuthMode('login');
+      } else if (err.code === 'auth/wrong-password' || err.code === 'auth/user-not-found') {
+        alert("Email ya Password ghalat hai.");
+      } else {
+        alert(err.message || 'Authentication failed');
+      }
     }
   };
 
@@ -327,6 +392,44 @@ export default function App() {
     }
   };
 
+  // --- Admin Handlers ---
+  const handleAddNews = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!isAdmin) return;
+    setIsSubmittingAdmin(true);
+    try {
+      await addDoc(collection(db, 'news'), {
+        ...newNews,
+        date: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }),
+        createdAt: serverTimestamp()
+      });
+      setNewNews({ title: '', description: '', icon: 'newspaper' });
+      alert('News added successfully!');
+    } catch (err) {
+      alert('Failed to add news');
+    } finally {
+      setIsSubmittingAdmin(false);
+    }
+  };
+
+  const handleAddCourse = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!isAdmin) return;
+    setIsSubmittingAdmin(true);
+    try {
+      await addDoc(collection(db, 'courses'), {
+        ...newCourse,
+        createdAt: serverTimestamp()
+      });
+      setNewCourse({ name: '', description: '' });
+      alert('Course added successfully!');
+    } catch (err) {
+      alert('Failed to add course');
+    } finally {
+      setIsSubmittingAdmin(false);
+    }
+  };
+
   return (
     <div className="min-h-screen flex flex-col">
       {/* --- Navigation Bar --- */}
@@ -357,7 +460,19 @@ export default function App() {
             {/* Actions on Right */}
             <div className="flex items-center gap-2">
               <button 
-                onClick={() => setSelectedItem({ title: 'Notifications', text: 'No new notifications at this time.\n\nCheck back later for updates on admissions and results.' })}
+                onClick={() => {
+                  if (user) {
+                    setSelectedItem({ 
+                      title: 'Welcome Back!', 
+                      text: `Assalam-o-Alaikum ${user.displayName || user.email}!\n\nMadni School mein khush amdeed. Aapka account active hai. Ab aap admission form bhar sakte hain aur results check kar sakte hain.` 
+                    });
+                  } else {
+                    setSelectedItem({ 
+                      title: 'Notifications', 
+                      text: 'No new notifications at this time.\n\nMeherbani karke Login karein taake aapko personalized updates mil sakein.' 
+                    });
+                  }
+                }}
                 className="relative p-2 text-madni-green hover:bg-madni-light-gold rounded-full transition-colors flex-shrink-0"
               >
                 <Bell className="w-6 h-6" />
@@ -390,7 +505,7 @@ export default function App() {
             transition={{ duration: 0.8, ease: "easeOut" }}
             className="w-48 h-48 sm:w-64 sm:h-64 rounded-full mx-auto madni-gradient animate-gradient flex flex-col items-center justify-center p-6 shadow-2xl border-2 border-madni-gold/30"
           >
-            <h1 className="text-2xl sm:text-3xl font-bold text-white mb-2 leading-tight">Madni School System</h1>
+            <h1 className="text-2xl sm:text-3xl font-bold text-white mb-2 leading-tight">Madni School</h1>
             <div className="w-full h-[2px] bg-madni-gold mb-2"></div>
             <p className="font-amiri text-xl sm:text-2xl text-madni-light-gold font-bold">جامعہ فیضان حلیمہ سعدیہ</p>
           </motion.div>
@@ -614,10 +729,22 @@ export default function App() {
         </div>
       </section>
 
+      {/* --- Admin Panel Button (Floating) --- */}
+      {isAdmin && (
+        <button 
+          onClick={() => setShowAdminPanel(true)}
+          className="fixed bottom-24 right-6 z-40 bg-madni-green text-white p-4 rounded-full shadow-2xl border-2 border-madni-gold hover:scale-110 transition-all flex items-center gap-2"
+        >
+          <Trophy className="w-6 h-6" />
+          <span className="font-bold">Admin Panel</span>
+        </button>
+      )}
+
       {/* --- Footer --- */}
       <footer className="mt-auto madni-gradient animate-gradient py-12 text-white border-t-4 border-madni-gold shadow-2xl">
         <div className="max-w-7xl mx-auto px-4 text-center">
           <p className="text-xl font-bold mb-2">&copy; 2025 Madni School | جامعہ حلیمہ سعدیہ</p>
+          <p className="text-xs opacity-60 mb-4">v1.1 - Updated & Verified</p>
           <div className="flex items-center justify-center gap-2 text-madni-light-gold">
             <Heart className="w-5 h-5 fill-madni-gold" />
             <span className="font-medium">Ilm o Adab ka markaz</span>
@@ -628,6 +755,131 @@ export default function App() {
 
       {/* --- Modals --- */}
       
+      {/* Admin Panel Modal */}
+      <AnimatePresence>
+        {showAdminPanel && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowAdminPanel(false)} className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+            <motion.div initial={{ scale: 0.9, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.9, opacity: 0, y: 20 }} className="bg-white rounded-[2rem] p-8 max-w-4xl w-full shadow-2xl border-4 border-madni-gold relative z-10 max-h-[90vh] overflow-y-auto">
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-2xl font-bold text-madni-green">Admin Control Panel</h3>
+                <button onClick={() => setShowAdminPanel(false)} className="p-2 hover:bg-slate-100 rounded-full"><X /></button>
+              </div>
+
+              <div className="grid md:grid-cols-2 gap-8">
+                {/* Add News Form */}
+                <div className="space-y-4 p-6 bg-slate-50 rounded-3xl border border-slate-200">
+                  <h4 className="font-bold text-madni-green flex items-center gap-2">
+                    <Newspaper className="w-5 h-5" /> Add New News
+                  </h4>
+                  <form onSubmit={handleAddNews} className="space-y-3">
+                    <input 
+                      type="text" 
+                      placeholder="News Title" 
+                      className="w-full px-4 py-2 rounded-xl border border-slate-300 outline-none focus:border-madni-green"
+                      value={newNews.title}
+                      onChange={e => setNewNews({...newNews, title: e.target.value})}
+                      required
+                    />
+                    <textarea 
+                      placeholder="News Description" 
+                      className="w-full px-4 py-2 rounded-xl border border-slate-300 outline-none focus:border-madni-green"
+                      rows={3}
+                      value={newNews.description}
+                      onChange={e => setNewNews({...newNews, description: e.target.value})}
+                      required
+                    />
+                    <select 
+                      className="w-full px-4 py-2 rounded-xl border border-slate-300 outline-none focus:border-madni-green"
+                      value={newNews.icon}
+                      onChange={e => setNewNews({...newNews, icon: e.target.value})}
+                    >
+                      <option value="newspaper">News Icon</option>
+                      <option value="graduation-cap">Education Icon</option>
+                      <option value="trophy">Trophy Icon</option>
+                    </select>
+                    <button 
+                      type="submit" 
+                      disabled={isSubmittingAdmin}
+                      className="w-full bg-madni-green text-white py-2 rounded-full font-bold hover:bg-madni-gold hover:text-madni-green transition-all"
+                    >
+                      {isSubmittingAdmin ? 'Adding...' : 'Add News'}
+                    </button>
+                  </form>
+                </div>
+
+                {/* Add Course Form */}
+                <div className="space-y-4 p-6 bg-slate-50 rounded-3xl border border-slate-200">
+                  <h4 className="font-bold text-madni-green flex items-center gap-2">
+                    <BookOpen className="w-5 h-5" /> Add New Course
+                  </h4>
+                  <form onSubmit={handleAddCourse} className="space-y-3">
+                    <input 
+                      type="text" 
+                      placeholder="Course Name" 
+                      className="w-full px-4 py-2 rounded-xl border border-slate-300 outline-none focus:border-madni-green"
+                      value={newCourse.name}
+                      onChange={e => setNewCourse({...newCourse, name: e.target.value})}
+                      required
+                    />
+                    <textarea 
+                      placeholder="Course Description" 
+                      className="w-full px-4 py-2 rounded-xl border border-slate-300 outline-none focus:border-madni-green"
+                      rows={3}
+                      value={newCourse.description}
+                      onChange={e => setNewCourse({...newCourse, description: e.target.value})}
+                      required
+                    />
+                    <button 
+                      type="submit" 
+                      disabled={isSubmittingAdmin}
+                      className="w-full bg-madni-green text-white py-2 rounded-full font-bold hover:bg-madni-gold hover:text-madni-green transition-all"
+                    >
+                      {isSubmittingAdmin ? 'Adding...' : 'Add Course'}
+                    </button>
+                  </form>
+                </div>
+              </div>
+
+              {/* Admissions List */}
+              <div className="mt-8">
+                <h4 className="font-bold text-madni-green mb-4 flex items-center gap-2">
+                  <UserPlus className="w-5 h-5" /> Recent Admissions
+                </h4>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-madni-green text-white">
+                        <th className="p-3 rounded-tl-xl">Student</th>
+                        <th className="p-3">Course</th>
+                        <th className="p-3">Phone</th>
+                        <th className="p-3 rounded-tr-xl">Date</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {admissions.length > 0 ? admissions.map((adm) => (
+                        <tr key={adm.id} className="border-b hover:bg-slate-50">
+                          <td className="p-3 font-medium">{adm.student_name}</td>
+                          <td className="p-3">{adm.course}</td>
+                          <td className="p-3">{adm.phone}</td>
+                          <td className="p-3 text-sm text-slate-500">
+                            {adm.submittedAt?.toDate().toLocaleDateString() || 'Pending'}
+                          </td>
+                        </tr>
+                      )) : (
+                        <tr>
+                          <td colSpan={4} className="p-10 text-center text-slate-400 italic">No admissions yet.</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
       {/* Auth Modal */}
       <AnimatePresence>
         {showAuthModal && (
@@ -653,6 +905,19 @@ export default function App() {
                   {authMode === 'login' ? 'Login' : 'Signup'}
                 </button>
               </form>
+
+              <div className="relative my-6">
+                <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-slate-200"></div></div>
+                <div className="relative flex justify-center text-sm"><span className="px-2 bg-white text-slate-500">Or continue with</span></div>
+              </div>
+
+              <button 
+                onClick={handleGoogleLogin}
+                className="w-full flex items-center justify-center gap-3 px-4 py-3 border-2 border-slate-200 rounded-full font-semibold hover:bg-slate-50 transition-all"
+              >
+                <img src="https://www.google.com/favicon.ico" alt="Google" className="w-5 h-5" />
+                Login with Google
+              </button>
               <p className="mt-4 text-center text-slate-600">
                 {authMode === 'login' ? "Don't have an account? " : "Already have an account? "}
                 <button onClick={() => setAuthMode(authMode === 'login' ? 'signup' : 'login')} className="text-madni-green font-bold hover:underline">

@@ -28,7 +28,7 @@ export default async function handler(
       from: process.env.EMAIL_USER,
       to: email,
       subject: 'Admission Application Received - Madni School',
-      text: `Dear ${student_name},\n\nYour application for ${course} has been received. We will contact you soon.\n\nRegards,\nMadni School System`,
+      text: `Dear ${student_name},\n\nYour application for ${course} has been received. We will contact you soon.\n\nRegards,\nMadni School`,
     };
 
     await transporter.sendMail(mailOptions);
