@@ -11,6 +11,8 @@ service cloud.firestore {
     //   - name: string (required)
     //   - email: string (required, email format)
     //   - role: string (required, 'student' | 'admin')
+    //   - selectedCourse: string (optional)
+    //   - updatedAt: timestamp (optional)
     //   - createdAt: timestamp (required)
     //
     // Collection: admissions
@@ -100,12 +102,17 @@ service cloud.firestore {
     // ===============================================================
 
     function isValidUser(data) {
-      return hasRequiredFields(['name', 'email', 'role', 'createdAt']) &&
-             hasOnlyAllowedFields(['name', 'email', 'role', 'createdAt']) &&
+      let requiredFields = ['name', 'email', 'role', 'createdAt'];
+      let allowedFields = ['name', 'email', 'role', 'createdAt', 'selectedCourse', 'updatedAt'];
+      
+      return hasRequiredFields(requiredFields) &&
+             hasOnlyAllowedFields(allowedFields) &&
              data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
              isValidEmail(data.email) &&
              data.role in ['student', 'admin'] &&
-             data.createdAt is timestamp;
+             data.createdAt is timestamp &&
+             (!('selectedCourse' in data) || data.selectedCourse is string) &&
+             (!('updatedAt' in data) || data.updatedAt is timestamp);
     }
 
     function isValidAdmission(data) {

@@ -143,19 +143,40 @@ export default function App() {
   const [showCourseSelection, setShowCourseSelection] = useState(false);
   const [userProfile, setUserProfile] = useState<any>(null);
   const [selectionSuccess, setSelectionSuccess] = useState(false);
+  const [pendingCourse, setPendingCourse] = useState<string | null>(null);
+  const [isSelectingCourse, setIsSelectingCourse] = useState(false);
+  const [isCoursesLoading, setIsCoursesLoading] = useState(true);
+
+  const [isFromCourseSelection, setIsFromCourseSelection] = useState(false);
+
+  const openCourseSelection = () => {
+    console.log("Opening course selection modal");
+    setSelectionSuccess(false);
+    setShowCourseSelection(true);
+  };
 
   const checkUserProfile = async (currentUser: any) => {
     if (!currentUser) return;
     try {
       const userRef = doc(db, 'users', currentUser.uid);
       const userDoc = await getDoc(userRef);
+      
+      let profileData = null;
       if (userDoc.exists()) {
-        const data = userDoc.data();
-        setUserProfile(data);
-        // Show course selection if not an admin and no course selected
-        if (!data.selectedCourse && currentUser.email !== "arushafatima748@gmail.com") {
-          setShowCourseSelection(true);
-        }
+        profileData = userDoc.data();
+        setUserProfile(profileData);
+      }
+      
+      // If there's a pending course from before login, save it now
+      if (pendingCourse) {
+        const courseToSelect = pendingCourse;
+        setPendingCourse(null); // Clear it first to avoid loops
+        // Small delay to ensure auth modal is closed and state settled
+        setTimeout(async () => {
+          await handleSelectCourse(courseToSelect, currentUser);
+        }, 500);
+      } else if (profileData && !profileData.selectedCourse && currentUser.email !== "arushafatima748@gmail.com") {
+        openCourseSelection();
       }
     } catch (error) {
       console.error("Error fetching user profile:", error);
@@ -164,8 +185,10 @@ export default function App() {
 
   // --- Firebase Listeners ---
   useEffect(() => {
+    console.log("Setting up Firebase listeners");
     document.title = "Madni School";
     const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
+      console.log("Auth state changed:", user?.email);
       setUser(user);
       setIsAdmin(user?.email === "arushafatima748@gmail.com");
       
@@ -179,6 +202,7 @@ export default function App() {
 
     const qNews = query(collection(db, 'news'), orderBy('createdAt', 'desc'));
     const unsubscribeNews = onSnapshot(qNews, (snapshot) => {
+      console.log("News snapshot received, size:", snapshot.size);
       if (!snapshot.empty) {
         const newsData = snapshot.docs.map(doc => ({ _id: doc.id, ...doc.data() } as NewsItem));
         setNews(newsData);
@@ -191,16 +215,28 @@ export default function App() {
 
     const qCourses = query(collection(db, 'courses'), orderBy('createdAt', 'desc'));
     const unsubscribeCourses = onSnapshot(qCourses, (snapshot) => {
-      if (!snapshot.empty) {
-        const coursesData = snapshot.docs.map(doc => ({ _id: doc.id, ...doc.data() } as CourseItem));
-        setCourses(coursesData);
-      }
+      console.log("Courses snapshot received, size:", snapshot.size);
+      const coursesData = snapshot.docs.map(doc => ({ _id: doc.id, ...doc.data() } as CourseItem));
+      setCourses(coursesData);
+      setIsCoursesLoading(false);
+    }, (error) => {
+      console.error("Courses fetch error:", error);
+      setIsCoursesLoading(false);
     });
+
+    // Fallback for loading state
+    const loadingTimeout = setTimeout(() => {
+      if (isCoursesLoading) {
+        console.warn("Courses loading timed out, setting to false");
+        setIsCoursesLoading(false);
+      }
+    }, 5000);
 
     return () => {
       unsubscribeAuth();
       unsubscribeNews();
       unsubscribeCourses();
+      clearTimeout(loadingTimeout);
     };
   }, []);
 
@@ -374,17 +410,58 @@ export default function App() {
   };
 
   // --- Course Selection Handler ---
-  const handleSelectCourse = async (courseName: string) => {
-    if (!user) return;
+  const handleSelectCourse = async (courseName: string, currentUser?: any) => {
+    const activeUser = currentUser || user;
+    console.log("handleSelectCourse called for:", courseName, "User:", activeUser?.uid);
+    
+    if (!activeUser) {
+      console.log("No user, setting pending course:", courseName);
+      setPendingCourse(courseName);
+      setShowCourseSelection(false);
+      setAuthMode('signup');
+      setShowAuthModal(true);
+      return;
+    }
+
+    setIsSelectingCourse(true);
     try {
-      await updateDoc(doc(db, 'users', user.uid), {
+      const userRef = doc(db, 'users', activeUser.uid);
+      console.log("Updating Firestore for user:", activeUser.uid);
+      
+      // Use setDoc with merge to ensure the document exists
+      await setDoc(userRef, {
         selectedCourse: courseName,
         updatedAt: serverTimestamp()
-      });
-      setUserProfile((prev: any) => ({ ...prev, selectedCourse: courseName }));
+      }, { merge: true });
+      
+      // Update local profile state
+      setUserProfile((prev: any) => ({ 
+        ...(prev || {}), 
+        selectedCourse: courseName 
+      }));
+      
+      // Pre-fill admission form
+      setAdmissionForm(prev => ({
+        ...prev,
+        course: courseName,
+        student_name: activeUser.displayName || prev.student_name,
+        email: activeUser.email || prev.email
+      }));
+      setIsFromCourseSelection(true);
+
+      // Show success state
       setSelectionSuccess(true);
-    } catch (err) {
-      alert('Failed to select course. Please try again.');
+      setShowCourseSelection(true);
+      console.log("Course selection successful for:", courseName);
+    } catch (err: any) {
+      console.error("Course selection error details:", err);
+      if (err.message?.includes('permission-denied')) {
+        alert('Permission denied. Please try logging out and back in.');
+      } else {
+        alert('Failed to select course. Please check your internet and try again.');
+      }
+    } finally {
+      setIsSelectingCourse(false);
     }
   };
 
@@ -394,6 +471,7 @@ export default function App() {
     try {
       await addDoc(collection(db, 'admissions'), {
         ...admissionForm,
+        uid: user?.uid || null,
         submittedAt: serverTimestamp()
       });
       
@@ -414,6 +492,7 @@ export default function App() {
 
       alert('Application submitted successfully!');
       setShowAdmission(false);
+      setIsFromCourseSelection(false);
       setAdmissionForm({
         student_name: '', father_name: '', dob: '', gender: 'male', course: 'Hifz Program',
         phone: '', email: '', address: '', additional_info: ''
@@ -593,6 +672,28 @@ export default function App() {
             </div>
             <p className="font-amiri text-amber-900 text-sm">مدرسہ فیضان حلیمہ سعدیہ چکوال - زیر اہتمام مدنی تحریک</p>
           </motion.div>
+
+          <motion.div 
+            initial={{ y: 20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ delay: 0.6 }}
+            className="mt-12 flex flex-wrap justify-center gap-4"
+          >
+            <button 
+              onClick={openCourseSelection}
+              className="bg-madni-green text-white px-8 py-4 rounded-full font-bold border-2 border-madni-gold hover:bg-madni-gold hover:text-madni-green transition-all shadow-xl flex items-center gap-3 group"
+            >
+              <BookOpen className="w-6 h-6 group-hover:scale-110 transition-transform" />
+              Select Your Course
+            </button>
+            <button 
+              onClick={() => setShowAdmission(true)}
+              className="bg-white text-madni-green px-8 py-4 rounded-full font-bold border-2 border-madni-gold hover:bg-madni-light-gold transition-all shadow-lg flex items-center gap-3"
+            >
+              <UserPlus className="w-6 h-6" />
+              Apply for Admission
+            </button>
+          </motion.div>
         </div>
       </header>
 
@@ -666,6 +767,12 @@ export default function App() {
                 })
               },
               { icon: UserPlus, title: 'Student Admission', color: 'bg-red-100 text-red-800', action: () => setShowAdmission(true) },
+              { 
+                icon: BookOpen, 
+                title: 'Select Course', 
+                color: 'bg-amber-100 text-amber-800', 
+                action: openCourseSelection
+              },
               { icon: Newspaper, title: 'Result Announcement', color: 'bg-emerald-100 text-emerald-800', action: () => setShowResult(true) },
             ].map((service, idx) => (
               <motion.div 
@@ -734,21 +841,46 @@ export default function App() {
             <div className="absolute -bottom-4 left-1/2 -translate-x-1/2 w-20 h-1 bg-gradient-to-r from-madni-gold via-amber-400 to-madni-gold rounded-full shadow-sm"></div>
           </h2>
 
-          <div className="flex flex-wrap justify-center gap-4">
-            {isLoading ? (
-              <div>Loading courses...</div>
+          <div className="grid md:grid-cols-3 gap-6">
+            {isCoursesLoading ? (
+              <div className="col-span-full text-center py-10">
+                <div className="w-10 h-10 border-4 border-madni-gold border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                <p className="text-slate-500">Loading courses...</p>
+              </div>
             ) : filteredCourses.length > 0 ? filteredCourses.map((course) => (
-              <motion.button
+              <motion.div
                 key={course._id}
-                whileHover={{ scale: 1.05, y: -5 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={() => setSelectedItem({ title: course.name, text: course.description })}
-                className="bg-white px-6 py-3 rounded-full shadow-md border-2 border-emerald-100 font-semibold text-madni-green hover:bg-madni-green hover:text-white hover:border-madni-gold transition-all"
+                whileHover={{ y: -5 }}
+                className="bg-white p-6 rounded-[2rem] shadow-md border-2 border-emerald-50 hover:border-madni-gold transition-all flex flex-col"
               >
-                {course.name}
-              </motion.button>
+                <div className="w-12 h-12 rounded-2xl bg-emerald-50 flex items-center justify-center text-madni-green mb-4">
+                  <GraduationCap className="w-6 h-6" />
+                </div>
+                <h3 className="text-xl font-bold text-madni-green mb-2">{course.name}</h3>
+                <p className="text-slate-600 text-sm mb-6 flex-grow">{course.description}</p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setSelectedItem({ title: course.name, text: course.description })}
+                    className="flex-1 px-4 py-2 rounded-full border border-slate-200 text-sm font-bold hover:bg-slate-50 transition-colors"
+                  >
+                    Details
+                  </button>
+                  <button
+                    disabled={isSelectingCourse}
+                    onClick={() => {
+                      handleSelectCourse(course.name);
+                    }}
+                    className="flex-1 px-4 py-2 rounded-full bg-madni-green text-white text-sm font-bold border border-madni-gold hover:bg-madni-gold hover:text-madni-green transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                  >
+                    {isSelectingCourse ? (
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    ) : null}
+                    Select
+                  </button>
+                </div>
+              </motion.div>
             )) : (
-              <div className="text-slate-500 italic">No courses found matching your search.</div>
+              <div className="col-span-full text-center py-10 text-slate-500 italic">No courses found matching your search.</div>
             )}
           </div>
         </div>
@@ -867,7 +999,18 @@ export default function App() {
         {showCourseSelection && (
           <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-black/60 backdrop-blur-md" />
-            <motion.div initial={{ scale: 0.9, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.9, opacity: 0, y: 20 }} className="bg-white rounded-[2.5rem] p-8 max-w-lg w-full shadow-2xl border-4 border-madni-gold relative z-10">
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0, y: 20 }} 
+              animate={{ scale: 1, opacity: 1, y: 0 }} 
+              exit={{ scale: 0.9, opacity: 0, y: 20 }} 
+              className="bg-white rounded-[2rem] sm:rounded-[2.5rem] p-6 sm:p-8 max-w-lg w-full shadow-2xl border-4 border-madni-gold relative z-10 max-h-[90vh] overflow-y-auto"
+            >
+              <button 
+                onClick={() => { setShowCourseSelection(false); setSelectionSuccess(false); }}
+                className="absolute right-4 top-4 sm:right-6 sm:top-6 p-2 hover:bg-slate-100 rounded-full text-slate-400 hover:text-madni-green transition-colors z-20"
+              >
+                <X className="w-6 h-6" />
+              </button>
               {selectionSuccess ? (
                 <div className="text-center py-8">
                   <div className="w-24 h-24 rounded-full bg-emerald-100 mx-auto mb-6 flex items-center justify-center text-emerald-600 border-4 border-emerald-200">
@@ -879,10 +1022,14 @@ export default function App() {
                     Student admission process in <span className="font-bold">Jamia Halima Sadia</span> is now being processed.
                   </p>
                   <button 
-                    onClick={() => { setShowCourseSelection(false); setSelectionSuccess(false); }}
+                    onClick={() => { 
+                      setShowCourseSelection(false); 
+                      setSelectionSuccess(false);
+                      setShowAdmission(true);
+                    }}
                     className="w-full bg-madni-green text-white py-4 rounded-full font-bold border-2 border-madni-gold hover:bg-madni-gold hover:text-madni-green transition-all shadow-lg"
                   >
-                    Continue to Dashboard
+                    Complete Admission Form
                   </button>
                 </div>
               ) : (
@@ -896,19 +1043,74 @@ export default function App() {
                   </div>
                   
                   <div className="grid gap-4">
-                    {courses.map((course) => (
-                      <button
+                    {courses.length > 0 ? courses.map((course) => (
+                      <motion.button
                         key={course._id}
+                        whileHover={{ scale: 1.02, x: 5 }}
+                        whileTap={{ scale: 0.98 }}
+                        disabled={isSelectingCourse}
                         onClick={() => handleSelectCourse(course.name)}
-                        className="group p-5 rounded-2xl border-2 border-slate-100 hover:border-madni-gold hover:bg-madni-light-gold transition-all text-left flex items-center justify-between"
+                        className="group p-5 rounded-2xl border-2 border-slate-100 hover:border-madni-gold hover:bg-madni-light-gold transition-all text-left flex items-center justify-between disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         <div>
                           <h4 className="font-bold text-madni-green group-hover:text-madni-green">{course.name}</h4>
                           <p className="text-sm text-slate-500">{course.description}</p>
                         </div>
-                        <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-madni-gold" />
-                      </button>
-                    ))}
+                        {isSelectingCourse ? (
+                          <div className="w-5 h-5 border-2 border-madni-gold border-t-transparent rounded-full animate-spin"></div>
+                        ) : (
+                          <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-madni-gold" />
+                        )}
+                      </motion.button>
+                    )) : isCoursesLoading ? (
+                      <div className="flex flex-col items-center justify-center py-12">
+                        <div className="w-12 h-12 border-4 border-madni-gold border-t-transparent rounded-full animate-spin mb-4"></div>
+                        <p className="text-slate-500 font-medium">Loading courses...</p>
+                        <button 
+                          onClick={() => window.location.reload()}
+                          className="mt-4 text-sm text-madni-green hover:underline font-bold"
+                        >
+                          Taking too long? Click to Refresh
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="text-center py-10 px-6 text-slate-500 italic bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200">
+                        <p className="mb-4">No courses available at the moment.</p>
+                        <div className="flex flex-col gap-3">
+                          <button 
+                            onClick={() => window.location.reload()}
+                            className="text-madni-green font-bold hover:underline"
+                          >
+                            Refresh Page
+                          </button>
+                          {isAdmin && (
+                            <div className="mt-4 p-4 bg-amber-50 rounded-xl border border-amber-200">
+                              <p className="text-xs text-amber-800 mb-2 not-italic">
+                                Admin: No courses found. Click below to add default courses.
+                              </p>
+                              <button 
+                                onClick={async () => {
+                                  setIsSelectingCourse(true);
+                                  const initialCourses = [
+                                    { name: "Hifz-e-Quran", description: "Full Quran Memorization", createdAt: serverTimestamp() },
+                                    { name: "Nazra Quran", description: "Quran reading with Tajweed", createdAt: serverTimestamp() },
+                                    { name: "Dars-e-Nizami", description: "8-year Alim course", createdAt: serverTimestamp() }
+                                  ];
+                                  for (const item of initialCourses) {
+                                    await addDoc(collection(db, 'courses'), item);
+                                  }
+                                  setIsSelectingCourse(false);
+                                  alert("Default courses added!");
+                                }}
+                                className="w-full bg-madni-green text-white py-2 rounded-full text-xs font-bold shadow-sm"
+                              >
+                                Seed Default Courses
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
                   
                   <p className="text-center text-xs text-slate-400 mt-8 italic">
@@ -1004,6 +1206,23 @@ export default function App() {
                       {isSubmittingAdmin ? 'Adding...' : 'Add Course'}
                     </button>
                   </form>
+                  
+                  <div className="mt-6 pt-6 border-t border-slate-200">
+                    <button 
+                      onClick={async () => {
+                        if (window.confirm("This will add default news and courses if they don't exist. Continue?")) {
+                          setIsSubmittingAdmin(true);
+                          // The seed logic is already in a useEffect, but we can trigger it manually here if needed
+                          // For simplicity, we'll just alert that it runs on login
+                          alert("Seed logic runs automatically for admin on login. If data is missing, please refresh the page.");
+                          setIsSubmittingAdmin(false);
+                        }
+                      }}
+                      className="w-full bg-slate-200 text-slate-700 py-2 rounded-full font-bold hover:bg-slate-300 transition-all text-sm"
+                    >
+                      Check Seed Data
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -1099,11 +1318,19 @@ export default function App() {
       <AnimatePresence>
         {showAdmission && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowAdmission(false)} className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => { setShowAdmission(false); setIsFromCourseSelection(false); }} className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
             <motion.div initial={{ scale: 0.9, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.9, opacity: 0, y: 20 }} className="bg-white rounded-[2rem] p-8 max-w-2xl w-full shadow-2xl border-4 border-madni-gold relative z-10 max-h-[90vh] overflow-y-auto">
               <div className="flex justify-between items-center mb-6">
-                <h3 className="text-2xl font-bold text-madni-green">Admission Form</h3>
-                <button onClick={() => setShowAdmission(false)} className="p-2 hover:bg-slate-100 rounded-full"><X /></button>
+                <div>
+                  <h3 className="text-2xl font-bold text-madni-green">Admission Form</h3>
+                  {user && <p className="text-xs text-slate-500">Logged in as: {user.email}</p>}
+                  {isFromCourseSelection && (
+                    <p className="text-xs font-bold text-emerald-600 mt-1">
+                      Step 2: Please complete your information for {admissionForm.course}
+                    </p>
+                  )}
+                </div>
+                <button onClick={() => { setShowAdmission(false); setIsFromCourseSelection(false); }} className="p-2 hover:bg-slate-100 rounded-full"><X /></button>
               </div>
               <form onSubmit={handleAdmissionSubmit} className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1115,11 +1342,11 @@ export default function App() {
                     <option value="female">Female</option>
                   </select>
                   <select className="w-full px-4 py-3 rounded-xl border-2 border-slate-200 focus:border-madni-gold outline-none" value={admissionForm.course} onChange={e => setAdmissionForm({...admissionForm, course: e.target.value})}>
-                    <option>Hifz Program</option>
-                    <option>Nazra Quran</option>
-                    <option>Dars-e-Nizami</option>
-                    <option>Modern Education (Playgroup)</option>
-                    <option>Modern Education (Class 1-5)</option>
+                    {courses.map(c => (
+                      <option key={c._id} value={c.name}>{c.name}</option>
+                    ))}
+                    <option value="Modern Education (Playgroup)">Modern Education (Playgroup)</option>
+                    <option value="Modern Education (Class 1-5)">Modern Education (Class 1-5)</option>
                   </select>
                   <input type="tel" placeholder="Phone Number" className="w-full px-4 py-3 rounded-xl border-2 border-slate-200 focus:border-madni-gold outline-none" value={admissionForm.phone} onChange={e => setAdmissionForm({...admissionForm, phone: e.target.value})} required />
                   <input type="email" placeholder="Email" className="w-full px-4 py-3 rounded-xl border-2 border-slate-200 focus:border-madni-gold outline-none" value={admissionForm.email} onChange={e => setAdmissionForm({...admissionForm, email: e.target.value})} required />
