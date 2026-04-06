@@ -35,7 +35,7 @@ async function startServer() {
       from: process.env.EMAIL_USER,
       to: "arushafatima748@gmail.com",
       subject: `New Admission: ${student_name} - ${course}`,
-      text: `A new student has applied for admission.\n\nName: ${student_name}\nCourse: ${course}\nEmail: ${email}\n\nYou can view more details in the Madni School Admin Dashboard.`,
+      text: `A new student has applied for admission.\n\nName: ${student_name}\nCourse: ${course}\nEmail: ${email}\n\nYou can view more details in the Madani School System Admin Dashboard.`,
     };
 
     try {

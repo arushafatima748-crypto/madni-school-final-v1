@@ -3,9 +3,9 @@
 @theme {
   --font-sans: "Poppins", ui-sans-serif, system-ui, sans-serif;
   --font-amiri: "Amiri", serif;
-  --color-madni-green: #0b4d3b;
-  --color-madni-gold: #e4c580;
-  --color-madni-light-gold: #fef3c7;
+  --color-madani-green: #0b4d3b;
+  --color-madani-gold: #e4c580;
+  --color-madani-light-gold: #fef3c7;
 }
 
 @import url('https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Poppins:wght@300;400;500;600;700&display=swap');
@@ -16,7 +16,7 @@ body {
   background-attachment: fixed;
 }
 
-.madni-gradient {
+.madani-gradient {
   background: linear-gradient(145deg, #064e3b, #0b4d3b, #065f46, #1f8a5c, #064e3b);
   background-size: 400% 400%;
 }
