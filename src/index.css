@@ -17,7 +17,7 @@ body {
 }
 
 .madani-gradient {
-  background: linear-gradient(145deg, #064e3b, #0b4d3b, #065f46, #1f8a5c, #064e3b);
+  background: linear-gradient(145deg, #10b981, #0b4d3b, #34d399, #059669, #10b981);
   background-size: 400% 400%;
 }
 
@@ -29,4 +29,36 @@ body {
 
 .animate-gradient {
   animation: gradientMove 10s ease infinite;
+}
+
+.logo-glow {
+  box-shadow: 0 0 20px rgba(16, 185, 129, 0.4);
+}
+
+@keyframes shine {
+  0% { left: -100%; }
+  50% { left: 100%; }
+  100% { left: 100%; }
+}
+
+.animate-shine {
+  position: relative;
+  overflow: hidden;
+}
+
+.animate-shine::after {
+  content: "";
+  position: absolute;
+  top: -50%;
+  left: -100%;
+  width: 200%;
+  height: 200%;
+  background: linear-gradient(
+    to right,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.3) 50%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  transform: rotate(30deg);
+  animation: shine 3s infinite;
 }

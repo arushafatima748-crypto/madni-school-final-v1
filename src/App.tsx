@@ -30,9 +30,12 @@ import {
   Upload,
   FileText,
   Trash2,
-  AlertCircle
+  AlertCircle,
+  Download,
+  Loader2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import * as XLSX from 'xlsx';
 import { db, auth, onAuthStateChanged, FirebaseUser } from './lib/firebase';
 import { 
   collection, 
@@ -97,6 +100,10 @@ export default function App() {
   const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
   const [showPassword, setShowPassword] = useState(false);
   const [authForm, setAuthForm] = useState({ name: '', email: '', password: '' });
+  const [isAuthLoading, setIsAuthLoading] = useState(false);
+  const [isAuthSuccess, setIsAuthSuccess] = useState(false);
+  const [hasApplied, setHasApplied] = useState(false);
+  const [userAdmission, setUserAdmission] = useState<any>(null);
   
   // Data State
   const [news, setNews] = useState<NewsItem[]>([
@@ -168,6 +175,18 @@ export default function App() {
       if (userDoc.exists()) {
         profileData = userDoc.data();
         setUserProfile(profileData);
+      }
+
+      // Check for existing admission
+      const admissionsRef = collection(db, 'admissions');
+      const q = query(admissionsRef, where('uid', '==', currentUser.uid));
+      const admissionSnap = await getDocs(q);
+      if (!admissionSnap.empty) {
+        setHasApplied(true);
+        setUserAdmission(admissionSnap.docs[0].data());
+      } else {
+        setHasApplied(false);
+        setUserAdmission(null);
       }
       
       // If there's a pending course from before login, save it now
@@ -339,6 +358,7 @@ export default function App() {
 
   // --- Auth Handlers ---
   const handleGoogleLogin = async () => {
+    setIsAuthLoading(true);
     try {
       const result = await signInWithPopup(auth, googleProvider);
       const user = result.user;
@@ -354,10 +374,15 @@ export default function App() {
         });
       }
       
-      alert('Login successful with Google!');
-      setShowAuthModal(false);
+      setIsAuthSuccess(true);
+      setTimeout(() => {
+        setShowAuthModal(false);
+        setIsAuthSuccess(false);
+        setIsAuthLoading(false);
+      }, 1500);
       await checkUserProfile(user);
     } catch (err: any) {
+      setIsAuthLoading(false);
       console.error("Auth Error:", err);
       if (err.code === 'auth/unauthorized-domain') {
         alert("This domain is not authorized in Firebase Console. Please add your Vercel URL to Authorized Domains in Firebase.");
@@ -371,10 +396,10 @@ export default function App() {
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsAuthLoading(true);
     try {
       if (authMode === 'login') {
         await signInWithEmailAndPassword(auth, authForm.email, authForm.password);
-        alert('Login successful!');
       } else {
         const userCred = await createUserWithEmailAndPassword(auth, authForm.email, authForm.password);
         const displayName = authForm.email === "arushafatima748@gmail.com" ? "Madani School System" : authForm.name;
@@ -386,13 +411,18 @@ export default function App() {
           role: authForm.email === "arushafatima748@gmail.com" ? 'admin' : 'student',
           createdAt: serverTimestamp()
         });
-        alert('Signup successful!');
       }
-      setShowAuthModal(false);
+      setIsAuthSuccess(true);
+      setTimeout(() => {
+        setShowAuthModal(false);
+        setIsAuthSuccess(false);
+        setIsAuthLoading(false);
+      }, 1500);
       if (auth.currentUser) {
         await checkUserProfile(auth.currentUser);
       }
     } catch (err: any) {
+      setIsAuthLoading(false);
       console.error("Auth Error:", err);
       if (err.code === 'auth/operation-not-allowed') {
         alert("Email/Password login is not enabled in Firebase Console. Please enable it.");
@@ -499,6 +529,8 @@ export default function App() {
       }
 
       alert('Application submitted successfully!');
+      setHasApplied(true);
+      setUserAdmission(admissionForm);
       setShowAdmission(false);
       setIsFromCourseSelection(false);
       setAdmissionForm({
@@ -579,6 +611,32 @@ export default function App() {
     }
   };
 
+  const downloadAdmissionsExcel = () => {
+    if (!admissions || admissions.length === 0) {
+      alert("No admissions to download");
+      return;
+    }
+
+    const dataToExport = admissions.map(adm => ({
+      'Student Name': adm.student_name,
+      'Father Name': adm.father_name,
+      'Course': adm.course,
+      'Class': adm.selectedClass || 'N/A',
+      'Phone': adm.phone,
+      'Email': adm.email,
+      'Address': adm.address,
+      'Gender': adm.gender,
+      'DOB': adm.dob,
+      'Additional Info': adm.additional_info,
+      'Submitted At': adm.submittedAt?.toDate().toLocaleString() || 'N/A'
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(dataToExport);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Admissions");
+    XLSX.writeFile(workbook, `Madani_School_Admissions_${new Date().toLocaleDateString()}.xlsx`);
+  };
+
   return (
     <div className="min-h-screen flex flex-col">
       {/* --- Navigation Bar --- */}
@@ -587,9 +645,13 @@ export default function App() {
           <div className="flex justify-between h-16 items-center gap-3">
             {/* Logo on Left */}
             <div className="flex-shrink-0 cursor-pointer flex items-center gap-2" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
-              <div className="w-10 h-10 rounded-full madani-gradient flex items-center justify-center text-white font-bold text-xl shadow-md border-2 border-madani-gold/20 relative overflow-hidden">
-                <BookOpen className="w-6 h-6 absolute opacity-20" />
-                <span className="relative z-10">M</span>
+              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-emerald-400 to-madani-green flex items-center justify-center text-white font-bold text-xl shadow-md border-2 border-white/50 relative overflow-hidden group animate-shine logo-glow">
+                {/* Light Calligraphy Background inside Navbar Logo */}
+                <div className="absolute inset-0 opacity-20 flex items-center justify-center pointer-events-none select-none group-hover:scale-125 transition-transform duration-500">
+                  <span className="font-amiri text-[4rem] text-white rotate-[-15deg]">﷽</span>
+                </div>
+                <BookOpen className="w-6 h-6 absolute opacity-30 group-hover:scale-125 transition-transform" />
+                <span className="relative z-10 drop-shadow-sm">M</span>
               </div>
               <div className="hidden sm:flex flex-col">
                 <span className="text-madani-green font-bold text-lg leading-none">Madani</span>
@@ -660,7 +722,7 @@ export default function App() {
       {/* --- Hero Section --- */}
       <header id="home" className="relative py-20 overflow-hidden bg-[#fff9f0]">
         {/* Subtle Calligraphy Background for Hero Section */}
-        <div className="absolute inset-0 opacity-[0.03] pointer-events-none select-none flex items-center justify-center overflow-hidden">
+        <div className="absolute inset-0 opacity-[0.05] pointer-events-none select-none flex items-center justify-center overflow-hidden">
           <span className="font-amiri text-[40rem] text-madani-green rotate-[-10deg]">﷽</span>
         </div>
 
@@ -678,17 +740,17 @@ export default function App() {
             initial={{ scale: 0.8, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             transition={{ duration: 0.8, ease: "easeOut" }}
-            className="w-48 h-48 sm:w-64 sm:h-64 rounded-full mx-auto madani-gradient animate-gradient flex flex-col items-center justify-center p-6 shadow-2xl border-2 border-madani-gold/30 relative overflow-hidden"
+            className="w-48 h-48 sm:w-64 sm:h-64 rounded-full mx-auto bg-gradient-to-br from-emerald-400 via-madani-green to-teal-500 animate-gradient animate-shine logo-glow flex flex-col items-center justify-center p-6 shadow-2xl border-4 border-white/50 relative overflow-hidden group"
           >
             {/* Light Calligraphy Background */}
-            <div className="absolute inset-0 opacity-10 flex items-center justify-center pointer-events-none select-none">
-              <span className="font-amiri text-[10rem] text-white rotate-[-15deg]">﷽</span>
+            <div className="absolute inset-0 opacity-20 flex items-center justify-center pointer-events-none select-none group-hover:scale-110 transition-transform duration-700">
+              <span className="font-amiri text-[12rem] text-white rotate-[-15deg]">﷽</span>
             </div>
             
             <div className="relative z-10 flex flex-col items-center">
-              <h1 className="text-2xl sm:text-3xl font-bold text-white mb-2 leading-tight">Madani School System</h1>
-              <div className="w-full h-[2px] bg-madani-gold mb-2"></div>
-              <p className="font-amiri text-xl sm:text-2xl text-madani-light-gold font-bold">جامعہ فیضان حلیمہ سعدیہ</p>
+              <h1 className="text-2xl sm:text-3xl font-bold text-white mb-2 leading-tight drop-shadow-md">Madani School System</h1>
+              <div className="w-full h-[2px] bg-madani-gold/80 mb-2"></div>
+              <p className="font-amiri text-xl sm:text-2xl text-madani-light-gold font-bold drop-shadow-sm">جامعہ فیضان حلیمہ سعدیہ</p>
             </div>
           </motion.div>
 
@@ -709,18 +771,18 @@ export default function App() {
             initial={{ y: 20, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             transition={{ delay: 0.6 }}
-            className="mt-12 flex flex-wrap justify-center gap-4"
+            className="mt-12 flex flex-wrap justify-center gap-6"
           >
             <button 
               onClick={openCourseSelection}
-              className="bg-madani-green text-white px-8 py-4 rounded-full font-bold border-2 border-madani-gold hover:bg-madani-gold hover:text-madani-green transition-all shadow-xl flex items-center gap-3 group"
+              className="bg-gradient-to-r from-emerald-500 to-teal-600 text-white px-10 py-4 rounded-full font-bold shadow-xl hover:shadow-emerald-200/50 hover:scale-105 transition-all flex items-center gap-3 group border-2 border-white/20"
             >
-              <BookOpen className="w-6 h-6 group-hover:scale-110 transition-transform" />
+              <BookOpen className="w-6 h-6 group-hover:rotate-12 transition-transform" />
               Select Your Course
             </button>
             <button 
               onClick={() => setShowAdmission(true)}
-              className="bg-white text-madani-green px-8 py-4 rounded-full font-bold border-2 border-madani-gold hover:bg-madani-light-gold transition-all shadow-lg flex items-center gap-3"
+              className="bg-gradient-to-r from-amber-400 to-orange-500 text-white px-10 py-4 rounded-full font-bold shadow-xl hover:shadow-orange-200/50 hover:scale-105 transition-all flex items-center gap-3 border-2 border-white/20"
             >
               <UserPlus className="w-6 h-6" />
               Apply for Admission
@@ -760,63 +822,68 @@ export default function App() {
             <div className="absolute -bottom-4 left-1/2 -translate-x-1/2 w-20 h-1 bg-gradient-to-r from-madani-gold via-amber-400 to-madani-gold rounded-full shadow-sm"></div>
           </h2>
 
-          <div className="grid grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="flex flex-wrap justify-center gap-6 md:gap-10">
             {[
               { 
                 icon: BookOpen, 
-                title: 'Hifz Program', 
-                color: 'bg-emerald-100 text-emerald-800',
+                title: 'Hifz', 
+                gradient: 'from-emerald-400 to-teal-500',
                 action: () => setSelectedItem({ 
                   title: 'Hifz Program', 
-                  text: 'Our Hifz program focuses on complete Quran memorization with proper Tajweed rules. We provide a supportive environment for students to memorize the Holy Quran efficiently.' 
+                  text: 'Our Hifz program focuses on complete Quran memorization with proper Tajweed rules.' 
                 })
               },
               { 
                 icon: BookOpen, 
-                title: 'Nazra Quran', 
-                color: 'bg-orange-100 text-orange-800',
+                title: 'Nazra', 
+                gradient: 'from-amber-400 to-orange-500',
                 action: () => setSelectedItem({ 
                   title: 'Nazra Quran', 
-                  text: 'Nazra Quran course is designed for beginners to learn how to read the Quran with correct pronunciation (Tajweed) and basic Islamic teachings.' 
+                  text: 'Nazra Quran course is designed for beginners to learn how to read the Quran with correct pronunciation.' 
                 })
               },
               { 
                 icon: GraduationCap, 
-                title: 'Dars-e-Nizami', 
-                color: 'bg-blue-100 text-blue-800',
+                title: 'Dars', 
+                gradient: 'from-blue-400 to-indigo-500',
                 action: () => setSelectedItem({ 
                   title: 'Dars-e-Nizami', 
-                  text: 'The Alimah Course (Dars-e-Nizami) is an 8-year comprehensive study of Islamic sciences, including Arabic grammar, Fiqh, Hadith, and Tafseer.' 
+                  text: 'The Alimah Course (Dars-e-Nizami) is an 8-year comprehensive study of Islamic sciences.' 
                 })
               },
               { 
                 icon: GraduationCap, 
-                title: 'Modern Education', 
-                color: 'bg-purple-100 text-purple-800',
+                title: 'Modern', 
+                gradient: 'from-purple-400 to-pink-500',
                 action: () => setSelectedItem({ 
                   title: 'Modern Education', 
-                  text: 'Along with Islamic studies, we provide modern school education from Playgroup to Class 5, following the national curriculum.' 
+                  text: 'Along with Islamic studies, we provide modern school education from Playgroup to Class 5.' 
                 })
               },
-              { icon: UserPlus, title: 'Student Admission', color: 'bg-red-100 text-red-800', action: () => setShowAdmission(true) },
               { 
-                icon: BookOpen, 
-                title: 'Select Course', 
-                color: 'bg-amber-100 text-amber-800', 
-                action: openCourseSelection
+                icon: UserPlus, 
+                title: 'Admission', 
+                gradient: 'from-rose-400 to-red-500', 
+                action: () => setShowAdmission(true) 
               },
-              { icon: Newspaper, title: 'Result Announcement', color: 'bg-emerald-100 text-emerald-800', action: () => setShowResult(true) },
+              { 
+                icon: Newspaper, 
+                title: 'Result', 
+                gradient: 'from-cyan-400 to-blue-500', 
+                action: () => setShowResult(true) 
+              },
             ].map((service, idx) => (
               <motion.div 
                 key={idx}
-                whileHover={{ y: -10, scale: 1.02 }}
+                whileHover={{ y: -10, scale: 1.1 }}
                 onClick={service.action}
-                className="bg-white p-6 rounded-3xl text-center shadow-md border border-madani-gold/10 cursor-pointer hover:shadow-xl transition-all"
+                className="flex flex-col items-center cursor-pointer group"
               >
-                <div className={`w-16 h-16 mx-auto mb-4 rounded-2xl flex items-center justify-center ${service.color}`}>
-                  <service.icon className="w-8 h-8" />
+                <div className={`w-16 h-16 md:w-20 md:h-20 rounded-full bg-gradient-to-br ${service.gradient} flex items-center justify-center text-white shadow-lg group-hover:shadow-2xl transition-all border-4 border-white relative overflow-hidden`}>
+                  <div className="absolute inset-0 bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity" />
+                  <service.icon className="w-8 h-8 md:w-10 md:h-10 group-hover:scale-110 transition-transform relative z-10" />
                 </div>
-                <h3 className="font-bold text-slate-800">{service.title}</h3>
+                <span className="mt-2 text-[10px] font-bold text-slate-500 uppercase tracking-tighter opacity-0 group-hover:opacity-100 transition-opacity">{service.title}</span>
               </motion.div>
             ))}
           </div>
@@ -873,45 +940,58 @@ export default function App() {
             <div className="absolute -bottom-4 left-1/2 -translate-x-1/2 w-20 h-1 bg-gradient-to-r from-madani-gold via-amber-400 to-madani-gold rounded-full shadow-sm"></div>
           </h2>
 
-          <div className="grid md:grid-cols-3 gap-6">
+          <div className="grid md:grid-cols-3 gap-8">
             {isCoursesLoading ? (
               <div className="col-span-full text-center py-10">
                 <div className="w-10 h-10 border-4 border-madani-gold border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
                 <p className="text-slate-500">Loading courses...</p>
               </div>
-            ) : filteredCourses.length > 0 ? filteredCourses.map((course) => (
-              <motion.div
-                key={course._id}
-                whileHover={{ y: -5 }}
-                className="bg-white p-6 rounded-[2rem] shadow-md border-2 border-emerald-50 hover:border-madani-gold transition-all flex flex-col"
-              >
-                <div className="w-12 h-12 rounded-2xl bg-emerald-50 flex items-center justify-center text-madani-green mb-4">
-                  <GraduationCap className="w-6 h-6" />
-                </div>
-                <h3 className="text-xl font-bold text-madani-green mb-2">{course.name}</h3>
-                <p className="text-slate-600 text-sm mb-6 flex-grow">{course.description}</p>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setSelectedItem({ title: course.name, text: course.description })}
-                    className="flex-1 px-4 py-2 rounded-full border border-slate-200 text-sm font-bold hover:bg-slate-50 transition-colors"
-                  >
-                    Details
-                  </button>
-                  <button
-                    disabled={isSelectingCourse}
-                    onClick={() => {
-                      handleSelectCourse(course.name);
-                    }}
-                    className="flex-1 px-4 py-2 rounded-full bg-madani-green text-white text-sm font-bold border border-madani-gold hover:bg-madani-gold hover:text-madani-green transition-all flex items-center justify-center gap-2 disabled:opacity-50"
-                  >
-                    {isSelectingCourse ? (
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                    ) : null}
-                    Select
-                  </button>
-                </div>
-              </motion.div>
-            )) : (
+            ) : filteredCourses.length > 0 ? filteredCourses.map((course, idx) => {
+              const gradients = [
+                'from-emerald-500 to-teal-600',
+                'from-amber-500 to-orange-600',
+                'from-blue-500 to-indigo-600',
+                'from-purple-500 to-pink-600',
+                'from-rose-500 to-red-600',
+                'from-cyan-500 to-blue-600'
+              ];
+              const gradient = gradients[idx % gradients.length];
+              
+              return (
+                <motion.div
+                  key={course._id}
+                  whileHover={{ y: -10, scale: 1.02 }}
+                  className="relative bg-white rounded-[2.5rem] shadow-xl border border-slate-100 overflow-hidden flex flex-col group"
+                >
+                  <div className={`h-3 w-full bg-gradient-to-r ${gradient}`} />
+                  <div className="p-8 flex flex-col flex-grow">
+                    <div className={`w-14 h-14 rounded-2xl bg-gradient-to-br ${gradient} flex items-center justify-center text-white mb-6 shadow-lg group-hover:rotate-6 transition-transform`}>
+                      <GraduationCap className="w-8 h-8" />
+                    </div>
+                    <h3 className="text-2xl font-bold text-slate-800 mb-3 group-hover:text-madani-green transition-colors">{course.name}</h3>
+                    <p className="text-slate-600 leading-relaxed mb-8 flex-grow">{course.description}</p>
+                    <div className="flex gap-3">
+                      <button
+                        onClick={() => setSelectedItem({ title: course.name, text: course.description })}
+                        className="flex-1 px-6 py-3 rounded-full border-2 border-slate-100 text-sm font-bold hover:bg-slate-50 transition-all text-slate-700"
+                      >
+                        Details
+                      </button>
+                      <button
+                        disabled={isSelectingCourse}
+                        onClick={() => handleSelectCourse(course.name)}
+                        className={`flex-1 px-6 py-3 rounded-full bg-gradient-to-r ${gradient} text-white text-sm font-bold shadow-lg hover:shadow-xl hover:scale-105 transition-all flex items-center justify-center gap-2 disabled:opacity-50`}
+                      >
+                        {isSelectingCourse ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : null}
+                        Select
+                      </button>
+                    </div>
+                  </div>
+                </motion.div>
+              );
+            }) : (
               <div className="col-span-full text-center py-10 text-slate-500 italic">No courses found matching your search.</div>
             )}
           </div>
@@ -1164,8 +1244,14 @@ export default function App() {
             <motion.div initial={{ scale: 0.9, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.9, opacity: 0, y: 20 }} className="bg-white rounded-[2rem] p-8 max-w-4xl w-full shadow-2xl border-4 border-madani-gold relative z-10 max-h-[90vh] overflow-y-auto">
               <div className="flex justify-between items-center mb-6">
                 <h3 className="text-2xl font-bold text-madani-green">Admin Control Panel</h3>
-                <div className="flex items-center gap-4">
-                  <div className="bg-madani-gold/20 px-4 py-1 rounded-full border border-madani-gold/30">
+                <div className="flex items-center gap-3">
+                  <button 
+                    onClick={downloadAdmissionsExcel}
+                    className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-full text-xs font-bold hover:bg-emerald-700 transition-all shadow-md"
+                  >
+                    <Download className="w-4 h-4" /> Download Excel
+                  </button>
+                  <div className="bg-madani-gold/20 px-4 py-2 rounded-full border border-madani-gold/30">
                     <span className="text-xs font-bold text-madani-green">Total Admissions: {admissions.length}</span>
                   </div>
                   <button onClick={() => setShowAdminPanel(false)} className="p-2 hover:bg-slate-100 rounded-full"><X /></button>
@@ -1333,19 +1419,37 @@ export default function App() {
                 <button onClick={() => setShowAuthModal(false)} className="p-2 hover:bg-slate-100 rounded-full"><X /></button>
               </div>
               <form onSubmit={handleAuth} className="space-y-4">
-                {authMode === 'signup' && (
-                  <input type="text" placeholder="Full Name" className="w-full px-4 py-3 rounded-xl border-2 border-slate-200 focus:border-madani-gold outline-none" value={authForm.name} onChange={e => setAuthForm({...authForm, name: e.target.value})} required />
+                {isAuthSuccess ? (
+                  <motion.div 
+                    initial={{ scale: 0.5, opacity: 0 }} 
+                    animate={{ scale: 1, opacity: 1 }} 
+                    className="flex flex-col items-center justify-center py-8 text-emerald-600"
+                  >
+                    <CheckCircle className="w-16 h-16 mb-4" />
+                    <p className="text-xl font-bold">Success!</p>
+                  </motion.div>
+                ) : (
+                  <>
+                    {authMode === 'signup' && (
+                      <input type="text" placeholder="Full Name" className="w-full px-4 py-3 rounded-xl border-2 border-slate-200 focus:border-madani-gold outline-none" value={authForm.name} onChange={e => setAuthForm({...authForm, name: e.target.value})} required />
+                    )}
+                    <input type="email" placeholder="Email" className="w-full px-4 py-3 rounded-xl border-2 border-slate-200 focus:border-madani-gold outline-none" value={authForm.email} onChange={e => setAuthForm({...authForm, email: e.target.value})} required />
+                    <div className="relative">
+                      <input type={showPassword ? "text" : "password"} placeholder="Password" className="w-full px-4 py-3 rounded-xl border-2 border-slate-200 focus:border-madani-gold outline-none" value={authForm.password} onChange={e => setAuthForm({...authForm, password: e.target.value})} required />
+                      <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">
+                        {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                      </button>
+                    </div>
+                    <button 
+                      type="submit" 
+                      disabled={isAuthLoading}
+                      className="w-full bg-madani-green text-white py-3 rounded-full font-bold border-2 border-madani-gold hover:bg-madani-gold hover:text-madani-green transition-all flex items-center justify-center gap-2"
+                    >
+                      {isAuthLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : null}
+                      {authMode === 'login' ? 'Login' : 'Signup'}
+                    </button>
+                  </>
                 )}
-                <input type="email" placeholder="Email" className="w-full px-4 py-3 rounded-xl border-2 border-slate-200 focus:border-madani-gold outline-none" value={authForm.email} onChange={e => setAuthForm({...authForm, email: e.target.value})} required />
-                <div className="relative">
-                  <input type={showPassword ? "text" : "password"} placeholder="Password" className="w-full px-4 py-3 rounded-xl border-2 border-slate-200 focus:border-madani-gold outline-none" value={authForm.password} onChange={e => setAuthForm({...authForm, password: e.target.value})} required />
-                  <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">
-                    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                  </button>
-                </div>
-                <button type="submit" className="w-full bg-madani-green text-white py-3 rounded-full font-bold border-2 border-madani-gold hover:bg-madani-gold hover:text-madani-green transition-all">
-                  {authMode === 'login' ? 'Login' : 'Signup'}
-                </button>
               </form>
 
               <div className="relative my-6">
@@ -1381,7 +1485,7 @@ export default function App() {
                 <div>
                   <h3 className="text-2xl font-bold text-madani-green">Admission Form</h3>
                   {user && <p className="text-xs text-slate-500">Logged in as: {user.email}</p>}
-                  {isFromCourseSelection && (
+                  {isFromCourseSelection && !hasApplied && (
                     <p className="text-xs font-bold text-emerald-600 mt-1">
                       Step 2: Please complete your information for {admissionForm.course}
                     </p>
@@ -1389,7 +1493,29 @@ export default function App() {
                 </div>
                 <button onClick={() => { setShowAdmission(false); setIsFromCourseSelection(false); }} className="p-2 hover:bg-slate-100 rounded-full"><X /></button>
               </div>
-              <form onSubmit={handleAdmissionSubmit} className="space-y-4">
+              
+              {hasApplied ? (
+                <div className="text-center py-10 bg-emerald-50 rounded-3xl border-2 border-emerald-200">
+                  <CheckCircle className="w-16 h-16 text-emerald-600 mx-auto mb-4" />
+                  <h4 className="text-xl font-bold text-emerald-800 mb-2">Already Applied!</h4>
+                  <p className="text-slate-600 mb-6 px-6">
+                    Assalam-o-Alaikum! You have already submitted an admission application for 
+                    <span className="font-bold text-madani-green"> {userAdmission?.course || 'your selected course'}</span>.
+                  </p>
+                  <div className="bg-white mx-6 p-4 rounded-2xl shadow-sm text-left space-y-2 mb-8">
+                    <p className="text-sm"><strong>Student:</strong> {userAdmission?.student_name}</p>
+                    <p className="text-sm"><strong>Status:</strong> Under Review</p>
+                    <p className="text-sm"><strong>Submitted:</strong> {userAdmission?.submittedAt?.toDate().toLocaleDateString() || 'Recently'}</p>
+                  </div>
+                  <button 
+                    onClick={() => setShowAdmission(false)}
+                    className="bg-madani-green text-white px-8 py-3 rounded-full font-bold border-2 border-madani-gold hover:bg-madani-gold hover:text-madani-green transition-all"
+                  >
+                    Close
+                  </button>
+                </div>
+              ) : (
+                <form onSubmit={handleAdmissionSubmit} className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <input type="text" placeholder="Student Name" className="w-full px-4 py-3 rounded-xl border-2 border-slate-200 focus:border-madani-gold outline-none" value={admissionForm.student_name} onChange={e => setAdmissionForm({...admissionForm, student_name: e.target.value})} required />
                   <input type="text" placeholder="Father's Name" className="w-full px-4 py-3 rounded-xl border-2 border-slate-200 focus:border-madani-gold outline-none" value={admissionForm.father_name} onChange={e => setAdmissionForm({...admissionForm, father_name: e.target.value})} required />
@@ -1453,10 +1579,11 @@ export default function App() {
                   <Send className="w-5 h-5" /> Submit Application
                 </button>
               </form>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+            )}
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>
 
       {/* Result Modal */}
       <AnimatePresence>
