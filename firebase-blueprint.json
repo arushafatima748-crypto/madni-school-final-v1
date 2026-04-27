@@ -71,6 +71,27 @@
         "createdAt": { "type": "string", "format": "date-time", "description": "When the course was created." }
       },
       "required": ["name", "description", "createdAt"]
+    },
+    "ProgressReport": {
+      "title": "Progress Report",
+      "description": "Monthly student progress report with Urdu support.",
+      "type": "object",
+      "properties": {
+        "studentId": { "type": "string", "description": "The student's user ID." },
+        "studentName": { "type": "string", "description": "The student's name." },
+        "month": { "type": "string", "description": "The month of the report." },
+        "year": { "type": "string", "description": "The year of the report." },
+        "attendance": { "type": "string", "description": "Attendance details." },
+        "quranProgress": { "type": "string", "description": "Quranic studies progress." },
+        "academicProgress": { "type": "string", "description": "Academic subjects progress." },
+        "behavior": { "type": "string", "description": "General behavioral assessment." },
+        "classParticipation": { "type": "string", "description": "Behavior in class (Sitting/Listening)." },
+        "readingSkills": { "type": "string", "description": "Reading capability assessment." },
+        "writingSkills": { "type": "string", "description": "Writing capability assessment." },
+        "teacherRemarks": { "type": "string", "description": "Remarks from the teacher (Urdu/English)." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "When the report was created." }
+      },
+      "required": ["studentId", "studentName", "month", "year", "attendance", "createdAt"]
     }
   },
   "firestore": {
@@ -93,6 +114,10 @@
     "/courses/{courseId}": {
       "schema": { "$ref": "Course" },
       "description": "Available courses."
+    },
+    "/progress_reports/{reportId}": {
+      "schema": { "$ref": "ProgressReport" },
+      "description": "Student progress reports."
     }
   }
 }

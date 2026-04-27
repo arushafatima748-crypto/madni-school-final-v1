@@ -146,6 +146,14 @@ service cloud.firestore {
              data.createdAt is timestamp;
     }
 
+    function isValidProgressReport(data) {
+      return hasRequiredFields(['studentId', 'studentName', 'month', 'year', 'attendance', 'createdAt']) &&
+             data.studentId is string &&
+             data.month is string &&
+             data.year is string &&
+             data.createdAt is timestamp;
+    }
+
     // ===============================================================
     // Rules
     // ===============================================================
@@ -177,6 +185,11 @@ service cloud.firestore {
     match /courses/{courseId} {
       allow read: if true; // Publicly readable
       allow write: if isAdmin();
+    }
+
+    match /progress_reports/{reportId} {
+      allow read: if isAdmin() || (isAuthenticated() && resource.data.studentId == request.auth.uid);
+      allow write: if isAdmin() && isValidProgressReport(request.resource.data);
     }
   }
 }

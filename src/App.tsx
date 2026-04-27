@@ -32,7 +32,11 @@ import {
   Trash2,
   AlertCircle,
   Download,
-  Loader2
+  Loader2,
+  BookMarked,
+  Scroll,
+  Laptop,
+  Mic2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import * as XLSX from 'xlsx';
@@ -77,6 +81,23 @@ interface CourseItem {
   description: string;
 }
 
+interface ProgressReportItem {
+  _id: string;
+  studentId: string;
+  studentName: string;
+  month: string;
+  year: string;
+  attendance: string;
+  quranProgress: string;
+  academicProgress?: string;
+  behavior: string;
+  classParticipation: string;
+  readingSkills: string;
+  writingSkills: string;
+  teacherRemarks?: string;
+  createdAt: any;
+}
+
 interface ResultData {
   found: boolean;
   name?: string;
@@ -104,6 +125,8 @@ export default function App() {
   const [isAuthSuccess, setIsAuthSuccess] = useState(false);
   const [hasApplied, setHasApplied] = useState(false);
   const [userAdmission, setUserAdmission] = useState<any>(null);
+  const [isSubmittingAdmission, setIsSubmittingAdmission] = useState(false);
+  const [isAdmissionSuccess, setIsAdmissionSuccess] = useState(false);
   
   // Data State
   const [news, setNews] = useState<NewsItem[]>([
@@ -158,6 +181,27 @@ export default function App() {
   const [isCoursesLoading, setIsCoursesLoading] = useState(true);
 
   const [isFromCourseSelection, setIsFromCourseSelection] = useState(false);
+
+  // Progress Report State
+  const [progressReports, setProgressReports] = useState<ProgressReportItem[]>([]);
+  const [showProgressReports, setShowProgressReports] = useState(false);
+  const [showAddReport, setShowAddReport] = useState(false);
+  const [isReportsLoading, setIsReportsLoading] = useState(true);
+  const [newReport, setNewReport] = useState({
+    studentId: '',
+    studentName: '',
+    month: new Date().toLocaleString('default', { month: 'long' }),
+    year: new Date().getFullYear().toString(),
+    attendance: '',
+    quranProgress: '',
+    academicProgress: '',
+    behavior: 'Excellent',
+    classParticipation: 'Attentive',
+    readingSkills: 'Good',
+    writingSkills: 'Good',
+    teacherRemarks: ''
+  });
+  const [studentsList, setStudentsList] = useState<{uid: string, name: string}[]>([]);
 
   const openCourseSelection = () => {
     console.log("Opening course selection modal");
@@ -264,6 +308,36 @@ export default function App() {
     };
   }, []);
 
+  // --- Progress Reports Listener ---
+  useEffect(() => {
+    if (!user) {
+      setProgressReports([]);
+      return;
+    }
+
+    const reportsRef = collection(db, 'progress_reports');
+    // We use a simpler query first to avoid index requirement issues in dev
+    const qProgress = isAdmin 
+      ? query(reportsRef, orderBy('createdAt', 'desc'))
+      : query(reportsRef, where('studentId', '==', user.uid));
+    
+    setIsReportsLoading(true);
+    const unsubscribeProgress = onSnapshot(qProgress, (snapshot) => {
+      const reportsData = snapshot.docs.map(doc => ({ _id: doc.id, ...doc.data() } as ProgressReportItem));
+      // Manual sort for student query if index isn't ready
+      if (!isAdmin) {
+        reportsData.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+      }
+      setProgressReports(reportsData);
+      setIsReportsLoading(false);
+    }, (error) => {
+      console.error("Progress reports fetch error:", error);
+      setIsReportsLoading(false);
+    });
+
+    return () => unsubscribeProgress();
+  }, [user, isAdmin]);
+
   // --- Admin Data Listener ---
   useEffect(() => {
     if (!isAdmin) return;
@@ -274,7 +348,17 @@ export default function App() {
       setAdmissions(data);
     });
 
-    return () => unsubscribeAdmissions();
+    // Fetch students list for reports
+    const qStudents = query(collection(db, 'users'), where('role', '==', 'student'));
+    const unsubscribeStudents = onSnapshot(qStudents, (snapshot) => {
+      const list = snapshot.docs.map(doc => ({ uid: doc.id, name: doc.data().name }));
+      setStudentsList(list);
+    });
+
+    return () => {
+      unsubscribeAdmissions();
+      unsubscribeStudents();
+    };
   }, [isAdmin]);
 
   // --- Seed Data (First Run) ---
@@ -447,6 +531,38 @@ export default function App() {
   };
 
   // --- Course Selection Handler ---
+  const handleAddProgressReport = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!isAdmin) return;
+    setIsSubmittingAdmin(true);
+    try {
+      await addDoc(collection(db, 'progress_reports'), {
+        ...newReport,
+        createdAt: serverTimestamp()
+      });
+      alert('Progress report added successfully!');
+      setShowAddReport(false);
+      setNewReport({
+        studentId: '',
+        studentName: '',
+        month: new Date().toLocaleString('default', { month: 'long' }),
+        year: new Date().getFullYear().toString(),
+        attendance: '',
+        quranProgress: '',
+        academicProgress: '',
+        behavior: 'Excellent',
+        classParticipation: 'Attentive',
+        readingSkills: 'Good',
+        writingSkills: 'Good',
+        teacherRemarks: ''
+      });
+    } catch (err: any) {
+      alert(err.message || 'Failed to add progress report');
+    } finally {
+      setIsSubmittingAdmin(false);
+    }
+  };
+
   const handleSelectCourse = async (courseName: string, currentUser?: any) => {
     const activeUser = currentUser || user;
     console.log("handleSelectCourse called for:", courseName, "User:", activeUser?.uid);
@@ -506,6 +622,7 @@ export default function App() {
   // --- Admission Handler ---
   const handleAdmissionSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsSubmittingAdmission(true);
     try {
       await addDoc(collection(db, 'admissions'), {
         ...admissionForm,
@@ -528,17 +645,23 @@ export default function App() {
         console.error("Email notification failed:", e);
       }
 
-      alert('Application submitted successfully!');
+      setIsAdmissionSuccess(true);
       setHasApplied(true);
       setUserAdmission(admissionForm);
-      setShowAdmission(false);
-      setIsFromCourseSelection(false);
-      setAdmissionForm({
-        student_name: '', father_name: '', dob: '', gender: 'male', course: 'Hifz Program',
-        phone: '', email: '', address: '', additional_info: '', selectedClass: ''
-      });
-      setAdmissionFile(null);
+      
+      setTimeout(() => {
+        setShowAdmission(false);
+        setIsAdmissionSuccess(false);
+        setIsSubmittingAdmission(false);
+        setIsFromCourseSelection(false);
+        setAdmissionForm({
+          student_name: '', father_name: '', dob: '', gender: 'male', course: 'Hifz Program',
+          phone: '', email: '', address: '', additional_info: '', selectedClass: ''
+        });
+        setAdmissionFile(null);
+      }, 2000);
     } catch (err: any) {
+      setIsSubmittingAdmission(false);
       alert(err.message || 'Submission failed');
     }
   };
@@ -775,17 +898,18 @@ export default function App() {
           >
             <button 
               onClick={openCourseSelection}
-              className="bg-gradient-to-r from-emerald-500 to-teal-600 text-white px-10 py-4 rounded-full font-bold shadow-xl hover:shadow-emerald-200/50 hover:scale-105 transition-all flex items-center gap-3 group border-2 border-white/20"
+              disabled={hasApplied}
+              className={`px-10 py-4 rounded-full font-bold shadow-xl transition-all flex items-center gap-3 group border-2 border-white/20 ${hasApplied ? 'bg-slate-300 text-slate-500 cursor-not-allowed' : 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white hover:shadow-emerald-200/50 hover:scale-105'}`}
             >
               <BookOpen className="w-6 h-6 group-hover:rotate-12 transition-transform" />
-              Select Your Course
+              {hasApplied ? "Course Selected" : "Select Your Course"}
             </button>
             <button 
               onClick={() => setShowAdmission(true)}
-              className="bg-gradient-to-r from-amber-400 to-orange-500 text-white px-10 py-4 rounded-full font-bold shadow-xl hover:shadow-orange-200/50 hover:scale-105 transition-all flex items-center gap-3 border-2 border-white/20"
+              className={`px-10 py-4 rounded-full font-bold shadow-xl transition-all flex items-center gap-3 border-2 border-white/20 ${hasApplied ? 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white hover:shadow-emerald-200/50 hover:scale-105' : 'bg-gradient-to-r from-amber-400 to-orange-500 text-white hover:shadow-orange-200/50 hover:scale-105'}`}
             >
               <UserPlus className="w-6 h-6" />
-              Apply for Admission
+              {hasApplied ? "View My Admission" : "Apply for Admission"}
             </button>
           </motion.div>
         </div>
@@ -825,7 +949,7 @@ export default function App() {
           <div className="flex flex-wrap justify-center gap-6 md:gap-10">
             {[
               { 
-                icon: BookOpen, 
+                icon: Mic2, 
                 title: 'Hifz', 
                 gradient: 'from-emerald-400 to-teal-500',
                 action: () => setSelectedItem({ 
@@ -834,7 +958,7 @@ export default function App() {
                 })
               },
               { 
-                icon: BookOpen, 
+                icon: BookMarked, 
                 title: 'Nazra', 
                 gradient: 'from-amber-400 to-orange-500',
                 action: () => setSelectedItem({ 
@@ -843,7 +967,7 @@ export default function App() {
                 })
               },
               { 
-                icon: GraduationCap, 
+                icon: Scroll, 
                 title: 'Dars', 
                 gradient: 'from-blue-400 to-indigo-500',
                 action: () => setSelectedItem({ 
@@ -852,7 +976,7 @@ export default function App() {
                 })
               },
               { 
-                icon: GraduationCap, 
+                icon: Laptop, 
                 title: 'Modern', 
                 gradient: 'from-purple-400 to-pink-500',
                 action: () => setSelectedItem({ 
@@ -867,10 +991,16 @@ export default function App() {
                 action: () => setShowAdmission(true) 
               },
               { 
-                icon: Newspaper, 
+                icon: Trophy, 
                 title: 'Result', 
                 gradient: 'from-cyan-400 to-blue-500', 
                 action: () => setShowResult(true) 
+              },
+              { 
+                icon: FileText, 
+                title: user && user.email === "arushafatima748@gmail.com" ? 'Manage Reports' : 'My Progress', 
+                gradient: 'from-violet-400 to-purple-600', 
+                action: () => setShowProgressReports(true) 
               },
             ].map((service, idx) => (
               <motion.div 
@@ -1494,7 +1624,15 @@ export default function App() {
                 <button onClick={() => { setShowAdmission(false); setIsFromCourseSelection(false); }} className="p-2 hover:bg-slate-100 rounded-full"><X /></button>
               </div>
               
-              {hasApplied ? (
+              {isAdmissionSuccess ? (
+                <div className="text-center py-12 bg-emerald-50 rounded-3xl border-2 border-emerald-200">
+                  <motion.div initial={{ scale: 0.5 }} animate={{ scale: 1 }} className="flex justify-center mb-4">
+                    <CheckCircle className="w-16 h-16 text-emerald-600" />
+                  </motion.div>
+                  <h4 className="text-2xl font-bold text-emerald-800 mb-2">Submitted!</h4>
+                  <p className="text-slate-600">Your admission form has been received successfully.</p>
+                </div>
+              ) : hasApplied ? (
                 <div className="text-center py-10 bg-emerald-50 rounded-3xl border-2 border-emerald-200">
                   <CheckCircle className="w-16 h-16 text-emerald-600 mx-auto mb-4" />
                   <h4 className="text-xl font-bold text-emerald-800 mb-2">Already Applied!</h4>
@@ -1575,8 +1713,13 @@ export default function App() {
                     <span>{admissionFile ? admissionFile.name : "Upload Student Image/Documents"}</span>
                   </label>
                 </div>
-                <button type="submit" className="w-full bg-madani-green text-white py-3 rounded-full font-bold border-2 border-madani-gold hover:bg-madani-gold hover:text-madani-green transition-all flex items-center justify-center gap-2">
-                  <Send className="w-5 h-5" /> Submit Application
+                <button 
+                  type="submit" 
+                  disabled={isSubmittingAdmission}
+                  className="w-full bg-madani-green text-white py-3 rounded-full font-bold border-2 border-madani-gold hover:bg-madani-gold hover:text-madani-green transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  {isSubmittingAdmission ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
+                  {isSubmittingAdmission ? "Submitting..." : "Submit Application"}
                 </button>
               </form>
             )}
@@ -1636,6 +1779,323 @@ export default function App() {
               <h3 className="text-2xl font-bold text-madani-green mb-4">{selectedItem.title}</h3>
               <p className="text-slate-700 leading-relaxed whitespace-pre-line mb-8">{selectedItem.text}</p>
               <button onClick={() => setSelectedItem(null)} className="w-full bg-madani-green text-white py-3 rounded-full font-bold border-2 border-madani-gold hover:bg-madani-gold hover:text-madani-green transition-all">Close</button>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Progress Reports Modal */}
+      <AnimatePresence>
+        {showProgressReports && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowProgressReports(false)} className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+            <motion.div initial={{ scale: 0.9, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.9, opacity: 0, y: 20 }} className="bg-white rounded-[2rem] p-8 max-w-4xl w-full shadow-2xl border-4 border-madani-gold relative z-10 max-h-[90vh] overflow-y-auto">
+              <div className="flex justify-between items-center mb-6">
+                <div>
+                  <h3 className="text-2xl font-bold text-madani-green">
+                    {isAdmin ? "Manage Progress Reports" : "My Progress Reports"}
+                  </h3>
+                  <p className="text-slate-500 text-sm">Track monthly progress and evaluations</p>
+                </div>
+                <div className="flex items-center gap-3">
+                  {isAdmin && (
+                    <button 
+                      onClick={() => setShowAddReport(true)}
+                      className="bg-madani-green text-white px-4 py-2 rounded-full text-xs font-bold hover:bg-madani-gold hover:text-madani-green transition-all shadow-md flex items-center gap-2"
+                    >
+                      <UserPlus className="w-4 h-4" /> Add New Report
+                    </button>
+                  )}
+                  <button onClick={() => setShowProgressReports(false)} className="p-2 hover:bg-slate-100 rounded-full"><X /></button>
+                </div>
+              </div>
+
+              {isReportsLoading ? (
+                <div className="text-center py-20 text-slate-400 italic">Loading reports...</div>
+              ) : progressReports.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {progressReports.map((report) => (
+                    <motion.div 
+                      key={report._id} 
+                      className="bg-emerald-50 rounded-2xl p-6 border border-emerald-100 relative group overflow-hidden"
+                      whileHover={{ y: -5 }}
+                    >
+                      <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">
+                        <Scroll className="w-20 h-20 text-madani-green" />
+                      </div>
+                      <div className="flex justify-between items-start mb-4">
+                        <div>
+                          <span className="bg-madani-gold/20 text-madani-green text-[10px] font-bold px-2 py-1 rounded-full uppercase tracking-wider mb-2 inline-block">
+                            {report.month} {report.year}
+                          </span>
+                          <h4 className="text-lg font-bold text-slate-800">{report.studentName}</h4>
+                        </div>
+                        <div className={`px-3 py-1 rounded-full text-xs font-bold ${
+                          report.behavior === 'Excellent' ? 'bg-emerald-200 text-emerald-800' : 
+                          report.behavior === 'Good' ? 'bg-blue-200 text-blue-800' : 'bg-orange-200 text-orange-800'
+                        }`}>
+                          {report.behavior}
+                        </div>
+                      </div>
+                      <div className="space-y-3 mb-4">
+                        <div className="flex items-center gap-2 text-sm text-slate-600">
+                          <CheckCircle className="w-4 h-4 text-emerald-500" />
+                          <span><strong>Attendance:</strong> {report.attendance}</span>
+                        </div>
+                        <div className="p-3 bg-white/60 rounded-xl">
+                          <p className="text-xs font-bold text-madani-green uppercase mb-1 flex justify-between">
+                            <span>Quranic Progress</span>
+                            <span className="font-amiri text-sm">قرآنی علمیت</span>
+                          </p>
+                          <p className="text-sm text-slate-700">{report.quranProgress}</p>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="p-2 bg-white/40 rounded-lg">
+                            <p className="text-[10px] font-bold text-slate-500 uppercase mb-1 flex justify-between">
+                              <span>Class Behavior</span>
+                              <span className="font-amiri text-xs">کلاس رویہ</span>
+                            </p>
+                            <p className="text-xs text-slate-700">{report.classParticipation}</p>
+                          </div>
+                          <div className="p-2 bg-white/40 rounded-lg">
+                            <p className="text-[10px] font-bold text-slate-500 uppercase mb-1 flex justify-between">
+                              <span>Reading</span>
+                              <span className="font-amiri text-xs">پڑھنا</span>
+                            </p>
+                            <p className="text-xs text-slate-700">{report.readingSkills}</p>
+                          </div>
+                          <div className="p-2 bg-white/40 rounded-lg">
+                            <p className="text-[10px] font-bold text-slate-500 uppercase mb-1 flex justify-between">
+                              <span>Writing</span>
+                              <span className="font-amiri text-xs">لکھنا</span>
+                            </p>
+                            <p className="text-xs text-slate-700">{report.writingSkills}</p>
+                          </div>
+                        </div>
+                        {report.academicProgress && (
+                          <div className="p-3 bg-white/60 rounded-xl">
+                            <p className="text-xs font-bold text-blue-600 uppercase mb-1">Academic Progress</p>
+                            <p className="text-sm text-slate-700">{report.academicProgress}</p>
+                          </div>
+                        )}
+                        {report.teacherRemarks && (
+                          <div className="p-3 bg-madani-gold/5 rounded-xl border border-madani-gold/10">
+                            <p className="text-xs font-bold text-amber-700 uppercase mb-1">Teacher Remarks</p>
+                            <p className="text-sm italic text-slate-700">"{report.teacherRemarks}"</p>
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex justify-between items-center pt-2 border-t border-emerald-100">
+                        <span className="text-[10px] text-slate-400">Issued: {report.createdAt?.toDate().toLocaleDateString() || 'Recently'}</span>
+                        {isAdmin && (
+                          <button 
+                            onClick={async () => {
+                              if (confirm('Are you sure you want to delete this report?')) {
+                                await deleteDoc(doc(db, 'progress_reports', report._id));
+                              }
+                            }}
+                            className="p-1 text-red-400 hover:text-red-600 transition-colors"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+                    </motion.div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-20 bg-slate-50 rounded-3xl border-2 border-dashed border-slate-200">
+                  <FileText className="w-16 h-16 text-slate-300 mx-auto mb-4" />
+                  <p className="text-slate-500 font-medium">No progress reports found yet.</p>
+                  {isAdmin && (
+                    <button 
+                      onClick={() => setShowAddReport(true)}
+                      className="mt-4 text-madani-green font-bold hover:underline"
+                    >
+                      Create the first report
+                    </button>
+                  )}
+                </div>
+              )}
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Add Progress Report Modal */}
+      <AnimatePresence>
+        {showAddReport && (
+          <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowAddReport(false)} className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+            <motion.div initial={{ scale: 0.9, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.9, opacity: 0, y: 20 }} className="bg-white rounded-[2rem] p-8 max-w-2xl w-full shadow-2xl border-4 border-madani-gold relative z-10 max-h-[90vh] overflow-y-auto">
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-2xl font-bold text-madani-green">New Progress Report</h3>
+                <button onClick={() => setShowAddReport(false)} className="p-2 hover:bg-slate-100 rounded-full"><X /></button>
+              </div>
+              <form onSubmit={handleAddProgressReport} className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1 ml-1">Select Student</label>
+                    <select 
+                      className="w-full px-4 py-3 rounded-xl border-2 border-slate-200 focus:border-madani-gold outline-none" 
+                      value={newReport.studentId}
+                      onChange={(e) => {
+                        const std = studentsList.find(s => s.uid === e.target.value);
+                        setNewReport({ ...newReport, studentId: e.target.value, studentName: std?.name || '' });
+                      }}
+                      required
+                    >
+                      <option value="">-- Choose Student --</option>
+                      {studentsList.map(s => (
+                        <option key={s.uid} value={s.uid}>{s.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1 ml-1">Attendance</label>
+                    <input 
+                      type="text" 
+                      placeholder="e.g. 25/26 Days" 
+                      className="w-full px-4 py-3 rounded-xl border-2 border-slate-200 focus:border-madani-gold outline-none" 
+                      value={newReport.attendance}
+                      onChange={e => setNewReport({...newReport, attendance: e.target.value})}
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1 ml-1">Month</label>
+                    <select 
+                      className="w-full px-4 py-3 rounded-xl border-2 border-slate-200 focus:border-madani-gold outline-none" 
+                      value={newReport.month}
+                      onChange={e => setNewReport({...newReport, month: e.target.value})}
+                    >
+                      {["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"].map(m => (
+                        <option key={m} value={m}>{m}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1 ml-1">Year</label>
+                    <input 
+                      type="number" 
+                      className="w-full px-4 py-3 rounded-xl border-2 border-slate-200 focus:border-madani-gold outline-none" 
+                      value={newReport.year}
+                      onChange={e => setNewReport({...newReport, year: e.target.value})}
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-emerald-600 uppercase mb-1 ml-1">Quranic Progress</label>
+                  <textarea 
+                    placeholder="Describe progress in Quranic studies..." 
+                    className="w-full px-4 py-3 rounded-xl border-2 border-emerald-100 focus:border-madani-gold outline-none" 
+                    rows={2}
+                    value={newReport.quranProgress}
+                    onChange={e => setNewReport({...newReport, quranProgress: e.target.value})}
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-blue-600 uppercase mb-1 ml-1">Academic Progress</label>
+                  <textarea 
+                    placeholder="Describe progress in English, Urdu, Maths etc..." 
+                    className="w-full px-4 py-3 rounded-xl border-2 border-blue-50 focus:border-madani-gold outline-none" 
+                    rows={2}
+                    value={newReport.academicProgress}
+                    onChange={e => setNewReport({...newReport, academicProgress: e.target.value})}
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1 ml-1 flex justify-between">
+                      <span>Behavior (Overall)</span>
+                      <span className="font-amiri text-sm">مجموعی رویہ</span>
+                    </label>
+                    <select 
+                      className="w-full px-4 py-3 rounded-xl border-2 border-slate-200 focus:border-madani-gold outline-none" 
+                      value={newReport.behavior}
+                      onChange={e => setNewReport({...newReport, behavior: e.target.value})}
+                    >
+                      <option value="Excellent">Excellent (بہترین)</option>
+                      <option value="Good">Good (اچھا)</option>
+                      <option value="Average">Average (مناسب)</option>
+                      <option value="Needs Improvement">Needs Improvement (اصلاح کی ضرورت)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1 ml-1 flex justify-between">
+                      <span>Sitting in Class</span>
+                      <span className="font-amiri text-sm">کلاس میں بیٹھنا</span>
+                    </label>
+                    <select 
+                      className="w-full px-4 py-3 rounded-xl border-2 border-slate-200 focus:border-madani-gold outline-none" 
+                      value={newReport.classParticipation}
+                      onChange={e => setNewReport({...newReport, classParticipation: e.target.value})}
+                    >
+                      <option value="Attentive">Attentive (متوجہ)</option>
+                      <option value="Restless">Restless (بے چین)</option>
+                      <option value="Playful">Playful (شرارتی)</option>
+                      <option value="Quiet">Quiet (خاموش)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1 ml-1 flex justify-between">
+                      <span>Reading Skills</span>
+                      <span className="font-amiri text-sm">پڑھنے کی صلاحیت</span>
+                    </label>
+                    <select 
+                      className="w-full px-4 py-3 rounded-xl border-2 border-slate-200 focus:border-madani-gold outline-none" 
+                      value={newReport.readingSkills}
+                      onChange={e => setNewReport({...newReport, readingSkills: e.target.value})}
+                    >
+                      <option value="Fluent">Fluent (رواں)</option>
+                      <option value="Good">Good (اچھا)</option>
+                      <option value="Improving">Improving (بہتر ہو رہا ہے)</option>
+                      <option value="Needs Practice">Needs Practice (مشق کی ضرورت)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1 ml-1 flex justify-between">
+                      <span>Writing Skills</span>
+                      <span className="font-amiri text-sm">لکھنے کی صلاحیت</span>
+                    </label>
+                    <select 
+                      className="w-full px-4 py-3 rounded-xl border-2 border-slate-200 focus:border-madani-gold outline-none" 
+                      value={newReport.writingSkills}
+                      onChange={e => setNewReport({...newReport, writingSkills: e.target.value})}
+                    >
+                      <option value="Excellent">Excellent (بہترین)</option>
+                      <option value="Good">Good (اچھا)</option>
+                      <option value="Average">Average (مناسب)</option>
+                      <option value="Below Average">Below Average (کمزور)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-amber-700 uppercase mb-1 ml-1">Teacher Remarks</label>
+                  <textarea 
+                    placeholder="Personalized remarks for student..." 
+                    className="w-full px-4 py-3 rounded-xl border-2 border-slate-200 focus:border-madani-gold outline-none bg-amber-50/30" 
+                    rows={2}
+                    value={newReport.teacherRemarks}
+                    onChange={e => setNewReport({...newReport, teacherRemarks: e.target.value})}
+                  />
+                </div>
+
+                <button 
+                  type="submit" 
+                  disabled={isSubmittingAdmin}
+                  className="w-full bg-madani-green text-white py-3 rounded-full font-bold border-2 border-madani-gold hover:bg-madani-gold hover:text-madani-green transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  {isSubmittingAdmin ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
+                  {isSubmittingAdmin ? "Saving..." : "Save Progress Report"}
+                </button>
+              </form>
             </motion.div>
           </div>
         )}
