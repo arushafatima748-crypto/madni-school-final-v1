@@ -79,6 +79,16 @@ service cloud.firestore {
           (request.auth.token.email == "arushafatima748@gmail.com" && request.auth.token.email_verified == true));
     }
 
+    function isTeacher() {
+      return isAuthenticated() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'teacher';
+    }
+
+    function isTeacherOrAdmin() {
+      return isAdmin() || isTeacher();
+    }
+
     function hasRequiredFields(fields) {
       return request.resource.data.keys().hasAll(fields);
     }
@@ -109,7 +119,7 @@ service cloud.firestore {
              hasOnlyAllowedFields(allowedFields) &&
              data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
              isValidEmail(data.email) &&
-             data.role in ['student', 'admin'] &&
+             data.role in ['student', 'admin', 'teacher'] &&
              data.createdAt is timestamp &&
              (!('selectedCourse' in data) || data.selectedCourse is string) &&
              (!('updatedAt' in data) || data.updatedAt is timestamp);
@@ -188,8 +198,8 @@ service cloud.firestore {
     }
 
     match /progress_reports/{reportId} {
-      allow read: if isAdmin() || (isAuthenticated() && resource.data.studentId == request.auth.uid);
-      allow write: if isAdmin() && isValidProgressReport(request.resource.data);
+      allow read: if isTeacherOrAdmin() || (isAuthenticated() && resource.data.studentId == request.auth.uid);
+      allow write: if isTeacherOrAdmin() && isValidProgressReport(request.resource.data);
     }
   }
 }
