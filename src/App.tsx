@@ -20,6 +20,7 @@ import {
   UserPlus,
   CheckCircle,
   ArrowUp,
+  ShieldCheck,
   Bell,
   LogIn,
   LogOut,
@@ -172,6 +173,8 @@ export default function App() {
 
   // Admin Panel State
   const [admissions, setAdmissions] = useState<any[]>([]);
+  const [allUsers, setAllUsers] = useState<any[]>([]);
+  const [adminTab, setAdminTab] = useState<'admissions' | 'news' | 'courses' | 'users'>('admissions');
   const [showAdminPanel, setShowAdminPanel] = useState(false);
   const [newNews, setNewNews] = useState({ title: '', description: '', icon: 'newspaper' });
   const [newCourse, setNewCourse] = useState({ name: '', description: '' });
@@ -255,13 +258,24 @@ export default function App() {
   useEffect(() => {
     console.log("Setting up Firebase listeners");
     document.title = "Madani School System";
+    let unsubscribeProfile: (() => void) | null = null;
     const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
       console.log("Auth state changed:", user?.email);
       setUser(user);
       setIsAdmin(user?.email === "arushafatima748@gmail.com");
       
+      if (unsubscribeProfile) {
+        unsubscribeProfile();
+        unsubscribeProfile = null;
+      }
+
       if (user) {
         await checkUserProfile(user);
+        unsubscribeProfile = onSnapshot(doc(db, 'users', user.uid), (docSnap) => {
+          if (docSnap.exists()) {
+            setUserProfile(docSnap.data());
+          }
+        });
       } else {
         setUserProfile(null);
         setShowCourseSelection(false);
@@ -304,6 +318,7 @@ export default function App() {
 
     return () => {
       unsubscribeAuth();
+      if (unsubscribeProfile) unsubscribeProfile();
       unsubscribeNews();
       unsubscribeCourses();
       clearTimeout(loadingTimeout);
@@ -327,7 +342,7 @@ export default function App() {
     const unsubscribeProgress = onSnapshot(qProgress, (snapshot) => {
       const reportsData = snapshot.docs.map(doc => ({ _id: doc.id, ...doc.data() } as ProgressReportItem));
       // Manual sort for student query if index isn't ready
-      if (!isAdmin) {
+      if (!canManageReports) {
         reportsData.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
       }
       setProgressReports(reportsData);
@@ -338,7 +353,7 @@ export default function App() {
     });
 
     return () => unsubscribeProgress();
-  }, [user, isAdmin]);
+  }, [user, canManageReports]);
 
   // --- Admin Data Listener ---
   useEffect(() => {
@@ -350,7 +365,24 @@ export default function App() {
       setAdmissions(data);
     });
 
-    // Fetch students list for reports
+    // Fetch all users for user management (Admin only)
+    const qAllUsers = query(collection(db, 'users'), orderBy('createdAt', 'desc'));
+    const unsubscribeAllUsers = onSnapshot(qAllUsers, (snapshot) => {
+      const usersData = snapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() }));
+      setAllUsers(usersData);
+    });
+
+    return () => {
+      unsubscribeAdmissions();
+      unsubscribeAllUsers();
+    };
+  }, [isAdmin]);
+
+  // --- Reports Manager Listener (Teachers & Admins) ---
+  useEffect(() => {
+    if (!canManageReports) return;
+
+    // Fetch students list for reports (Needed by Teachers and Admins)
     const qStudents = query(collection(db, 'users'), where('role', '==', 'student'));
     const unsubscribeStudents = onSnapshot(qStudents, (snapshot) => {
       const list = snapshot.docs.map(doc => ({ uid: doc.id, name: doc.data().name }));
@@ -358,10 +390,9 @@ export default function App() {
     });
 
     return () => {
-      unsubscribeAdmissions();
       unsubscribeStudents();
     };
-  }, [isAdmin]);
+  }, [canManageReports]);
 
   // --- Seed Data (First Run) ---
   useEffect(() => {
@@ -739,6 +770,22 @@ export default function App() {
     }
   };
 
+  const updateUserRole = async (userId: string, newRole: string) => {
+    if (!isAdmin) return;
+    if (!window.confirm(`Are you sure you want to change this user's role to ${newRole}?`)) return;
+    
+    try {
+      await updateDoc(doc(db, 'users', userId), {
+        role: newRole,
+        updatedAt: serverTimestamp()
+      });
+      alert(`User role updated to ${newRole}`);
+    } catch (err: any) {
+      console.error("Error updating role:", err);
+      alert(err.message || "Failed to update role");
+    }
+  };
+
   const downloadAdmissionsExcel = () => {
     if (!admissions || admissions.length === 0) {
       alert("No admissions to download");
@@ -823,25 +870,45 @@ export default function App() {
                 <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-red-500 border-2 border-white rounded-full"></span>
               </button>
               
-              {user ? (
-                <div className="flex items-center gap-2">
-                  <div className="hidden sm:flex flex-col items-end">
-                    <span className="text-sm font-bold text-madani-green">
-                      {user.email === "arushafatima748@gmail.com" ? "Madani School System" : (user.displayName || user.email)}
-                    </span>
-                    {userProfile?.selectedCourse && (
-                      <span className="text-[10px] font-bold text-madani-gold uppercase tracking-tighter">Course: {userProfile.selectedCourse}</span>
-                    )}
-                  </div>
-                  <button onClick={handleLogout} className="p-2 text-amber-700 hover:bg-amber-50 rounded-full transition-colors">
-                    <LogOut className="w-6 h-6" />
+              <div className="flex items-center gap-2 sm:gap-4">
+                {isAdmin && (
+                  <button 
+                    onClick={() => setShowAdminPanel(true)}
+                    className="flex items-center gap-2 bg-madani-gold text-madani-green px-4 py-2 rounded-full text-xs font-bold hover:bg-madani-light-gold transition-all shadow-md"
+                  >
+                    <ShieldCheck className="w-4 h-4" /> <span className="hidden sm:inline">Admin Panel</span>
                   </button>
-                </div>
-              ) : (
-                <button onClick={() => { setAuthMode('login'); setShowAuthModal(true); }} className="p-2 text-madani-green hover:bg-madani-light-gold rounded-full transition-colors">
-                  <LogIn className="w-6 h-6" />
-                </button>
-              )}
+                )}
+                
+                {user ? (
+                  <div className="flex items-center gap-2">
+                    <div className="hidden sm:flex flex-col items-end">
+                      <div className="flex items-center gap-2">
+                        {userProfile?.role && userProfile.role !== 'student' && (
+                          <span className={`px-2 py-0.5 rounded-full text-[8px] font-bold uppercase tracking-widest border ${
+                            userProfile.role === 'admin' ? 'bg-purple-100 text-purple-700 border-purple-200' : 'bg-blue-100 text-blue-700 border-blue-200'
+                          }`}>
+                            {userProfile.role}
+                          </span>
+                        )}
+                        <span className="text-sm font-bold text-madani-green">
+                          {user.email === "arushafatima748@gmail.com" ? "Madani School System" : (userProfile?.name || user.email)}
+                        </span>
+                      </div>
+                      {userProfile?.selectedCourse && (
+                        <span className="text-[10px] font-bold text-madani-gold uppercase tracking-tighter">Course: {userProfile.selectedCourse}</span>
+                      )}
+                    </div>
+                    <button onClick={handleLogout} className="p-2 text-amber-700 hover:bg-amber-50 rounded-full transition-colors">
+                      <LogOut className="w-6 h-6" />
+                    </button>
+                  </div>
+                ) : (
+                  <button onClick={() => { setAuthMode('login'); setShowAuthModal(true); }} className="p-2 text-madani-green hover:bg-madani-light-gold rounded-full transition-colors">
+                    <LogIn className="w-6 h-6" />
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -1380,164 +1447,239 @@ export default function App() {
               <div className="flex justify-between items-center mb-6">
                 <h3 className="text-2xl font-bold text-madani-green">Admin Control Panel</h3>
                 <div className="flex items-center gap-3">
-                  <button 
-                    onClick={downloadAdmissionsExcel}
-                    className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-full text-xs font-bold hover:bg-emerald-700 transition-all shadow-md"
-                  >
-                    <Download className="w-4 h-4" /> Download Excel
-                  </button>
-                  <div className="bg-madani-gold/20 px-4 py-2 rounded-full border border-madani-gold/30">
-                    <span className="text-xs font-bold text-madani-green">Total Admissions: {admissions.length}</span>
-                  </div>
                   <button onClick={() => setShowAdminPanel(false)} className="p-2 hover:bg-slate-100 rounded-full"><X /></button>
                 </div>
               </div>
 
-              <div className="grid md:grid-cols-2 gap-8">
-                {/* Add News Form */}
-                <div className="space-y-4 p-6 bg-slate-50 rounded-3xl border border-slate-200">
-                  <h4 className="font-bold text-madani-green flex items-center gap-2">
-                    <Newspaper className="w-5 h-5" /> Add New News
-                  </h4>
-                  <form onSubmit={handleAddNews} className="space-y-3">
-                    <input 
-                      type="text" 
-                      placeholder="News Title" 
-                      className="w-full px-4 py-2 rounded-xl border border-slate-300 outline-none focus:border-madani-green"
-                      value={newNews.title}
-                      onChange={e => setNewNews({...newNews, title: e.target.value})}
-                      required
-                    />
-                    <textarea 
-                      placeholder="News Description" 
-                      className="w-full px-4 py-2 rounded-xl border border-slate-300 outline-none focus:border-madani-green"
-                      rows={3}
-                      value={newNews.description}
-                      onChange={e => setNewNews({...newNews, description: e.target.value})}
-                      required
-                    />
-                    <select 
-                      className="w-full px-4 py-2 rounded-xl border border-slate-300 outline-none focus:border-madani-green"
-                      value={newNews.icon}
-                      onChange={e => setNewNews({...newNews, icon: e.target.value})}
-                    >
-                      <option value="newspaper">News Icon</option>
-                      <option value="graduation-cap">Education Icon</option>
-                      <option value="trophy">Trophy Icon</option>
-                    </select>
-                    <button 
-                      type="submit" 
-                      disabled={isSubmittingAdmin}
-                      className="w-full bg-madani-green text-white py-2 rounded-full font-bold hover:bg-madani-gold hover:text-madani-green transition-all"
-                    >
-                      {isSubmittingAdmin ? 'Adding...' : 'Add News'}
-                    </button>
-                  </form>
-                </div>
+              {/* Admin Tabs */}
+              <div className="flex border-b border-slate-200 mb-6 overflow-x-auto">
+                {[
+                  { id: 'admissions', label: 'Admissions', icon: UserPlus },
+                  { id: 'news', label: 'News & Courses', icon: Newspaper },
+                  { id: 'users', label: 'User Management', icon: GraduationCap }
+                ].map((tab) => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setAdminTab(tab.id as any)}
+                    className={`flex items-center gap-2 px-6 py-3 border-b-2 transition-all font-bold text-sm whitespace-nowrap ${
+                      adminTab === tab.id 
+                        ? 'border-madani-green text-madani-green bg-emerald-50' 
+                        : 'border-transparent text-slate-500 hover:text-slate-700'
+                    }`}
+                  >
+                    <tab.icon className="w-4 h-4" />
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
 
-                {/* Add Course Form */}
-                <div className="space-y-4 p-6 bg-slate-50 rounded-3xl border border-slate-200">
-                  <h4 className="font-bold text-madani-green flex items-center gap-2">
-                    <BookOpen className="w-5 h-5" /> Add New Course
-                  </h4>
-                  <form onSubmit={handleAddCourse} className="space-y-3">
-                    <input 
-                      type="text" 
-                      placeholder="Course Name" 
-                      className="w-full px-4 py-2 rounded-xl border border-slate-300 outline-none focus:border-madani-green"
-                      value={newCourse.name}
-                      onChange={e => setNewCourse({...newCourse, name: e.target.value})}
-                      required
-                    />
-                    <textarea 
-                      placeholder="Course Description" 
-                      className="w-full px-4 py-2 rounded-xl border border-slate-300 outline-none focus:border-madani-green"
-                      rows={3}
-                      value={newCourse.description}
-                      onChange={e => setNewCourse({...newCourse, description: e.target.value})}
-                      required
-                    />
-                    <button 
-                      type="submit" 
-                      disabled={isSubmittingAdmin}
-                      className="w-full bg-madani-green text-white py-2 rounded-full font-bold hover:bg-madani-gold hover:text-madani-green transition-all"
-                    >
-                      {isSubmittingAdmin ? 'Adding...' : 'Add Course'}
-                    </button>
-                  </form>
-                  
-                  <div className="mt-6 pt-6 border-t border-slate-200">
-                    <button 
-                      onClick={async () => {
-                        if (window.confirm("This will add default news and courses if they don't exist. Continue?")) {
-                          setIsSubmittingAdmin(true);
-                          // The seed logic is already in a useEffect, but we can trigger it manually here if needed
-                          // For simplicity, we'll just alert that it runs on login
-                          alert("Seed logic runs automatically for admin on login. If data is missing, please refresh the page.");
-                          setIsSubmittingAdmin(false);
-                        }
-                      }}
-                      className="w-full bg-slate-200 text-slate-700 py-2 rounded-full font-bold hover:bg-slate-300 transition-all text-sm"
-                    >
-                      Check Seed Data
-                    </button>
+              {adminTab === 'news' && (
+                <div className="grid md:grid-cols-2 gap-8 animate-in fade-in duration-300">
+                  {/* Add News Form */}
+                  <div className="space-y-4 p-6 bg-slate-50 rounded-3xl border border-slate-200">
+                    <h4 className="font-bold text-madani-green flex items-center gap-2">
+                      <Newspaper className="w-5 h-5" /> Add New News
+                    </h4>
+                    <form onSubmit={handleAddNews} className="space-y-3">
+                      <input 
+                        type="text" 
+                        placeholder="News Title" 
+                        className="w-full px-4 py-2 rounded-xl border border-slate-300 outline-none focus:border-madani-green"
+                        value={newNews.title}
+                        onChange={e => setNewNews({...newNews, title: e.target.value})}
+                        required
+                      />
+                      <textarea 
+                        placeholder="News Description" 
+                        className="w-full px-4 py-2 rounded-xl border border-slate-300 outline-none focus:border-madani-green"
+                        rows={3}
+                        value={newNews.description}
+                        onChange={e => setNewNews({...newNews, description: e.target.value})}
+                        required
+                      />
+                      <select 
+                        className="w-full px-4 py-2 rounded-xl border border-slate-300 outline-none focus:border-madani-green"
+                        value={newNews.icon}
+                        onChange={e => setNewNews({...newNews, icon: e.target.value})}
+                      >
+                        <option value="newspaper">News Icon</option>
+                        <option value="graduation-cap">Education Icon</option>
+                        <option value="trophy">Trophy Icon</option>
+                      </select>
+                      <button 
+                        type="submit" 
+                        disabled={isSubmittingAdmin}
+                        className="w-full bg-madani-green text-white py-2 rounded-full font-bold hover:bg-madani-gold hover:text-madani-green transition-all"
+                      >
+                        {isSubmittingAdmin ? 'Adding...' : 'Add News'}
+                      </button>
+                    </form>
+                  </div>
+
+                  {/* Add Course Form */}
+                  <div className="space-y-4 p-6 bg-slate-50 rounded-3xl border border-slate-200">
+                    <h4 className="font-bold text-madani-green flex items-center gap-2">
+                      <BookOpen className="w-5 h-5" /> Add New Course
+                    </h4>
+                    <form onSubmit={handleAddCourse} className="space-y-3">
+                      <input 
+                        type="text" 
+                        placeholder="Course Name" 
+                        className="w-full px-4 py-2 rounded-xl border border-slate-300 outline-none focus:border-madani-green"
+                        value={newCourse.name}
+                        onChange={e => setNewCourse({...newCourse, name: e.target.value})}
+                        required
+                      />
+                      <textarea 
+                        placeholder="Course Description" 
+                        className="w-full px-4 py-2 rounded-xl border border-slate-300 outline-none focus:border-madani-green"
+                        rows={3}
+                        value={newCourse.description}
+                        onChange={e => setNewCourse({...newCourse, description: e.target.value})}
+                        required
+                      />
+                      <button 
+                        type="submit" 
+                        disabled={isSubmittingAdmin}
+                        className="w-full bg-madani-green text-white py-2 rounded-full font-bold hover:bg-madani-gold hover:text-madani-green transition-all"
+                      >
+                        {isSubmittingAdmin ? 'Adding...' : 'Add Course'}
+                      </button>
+                    </form>
                   </div>
                 </div>
-              </div>
+              )}
 
-              {/* Admissions List */}
-              <div className="mt-8">
-                <h4 className="font-bold text-madani-green mb-4 flex items-center gap-2">
-                  <UserPlus className="w-5 h-5" /> Recent Admissions
-                </h4>
-                <div className="overflow-x-auto rounded-xl border border-slate-200 shadow-sm">
-                  <table className="w-full text-left border-collapse min-w-[800px]">
-                    <thead>
-                      <tr className="bg-madani-green text-white">
-                        <th className="p-3 text-sm">Student</th>
-                        <th className="p-3 text-sm">Father Name</th>
-                        <th className="p-3 text-sm">Course</th>
-                        <th className="p-3 text-sm">Phone</th>
-                        <th className="p-3 text-sm">Address</th>
-                        <th className="p-3 text-sm">Date</th>
-                        <th className="p-3 text-sm text-center">Action</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {admissions.length > 0 ? admissions.map((adm) => (
-                        <tr key={adm.id} className="border-b hover:bg-slate-50 transition-colors">
-                          <td className="p-3 text-sm font-bold text-madani-green">{adm.student_name}</td>
-                          <td className="p-3 text-sm text-slate-600">{adm.father_name}</td>
-                          <td className="p-3 text-sm font-medium">
-                            {adm.course}
-                            {adm.selectedClass && (
-                              <span className="block text-[10px] text-madani-gold font-bold uppercase">Class: {adm.selectedClass}</span>
-                            )}
-                          </td>
-                          <td className="p-3 text-sm text-slate-600">{adm.phone}</td>
-                          <td className="p-3 text-sm text-slate-500 truncate max-w-[150px]">{adm.address}</td>
-                          <td className="p-3 text-sm text-slate-400">
-                            {adm.submittedAt?.toDate().toLocaleDateString() || 'Pending'}
-                          </td>
-                          <td className="p-3 text-center">
-                            <button 
-                              onClick={() => handleDeleteAdmission(adm.id)}
-                              className="p-2 text-red-500 hover:bg-red-50 rounded-full transition-colors"
-                              title="Delete Admission"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </td>
+              {adminTab === 'admissions' && (
+                <div className="animate-in fade-in duration-300">
+                  <div className="flex justify-between items-center mb-4">
+                    <h4 className="font-bold text-madani-green flex items-center gap-2">
+                      <UserPlus className="w-5 h-5" /> All Admissions ({admissions.length})
+                    </h4>
+                    <button 
+                      onClick={downloadAdmissionsExcel}
+                      className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-full text-xs font-bold hover:bg-emerald-700 transition-all shadow-md"
+                    >
+                      <Download className="w-4 h-4" /> Export Excel
+                    </button>
+                  </div>
+                  <div className="overflow-x-auto rounded-xl border border-slate-200 shadow-sm">
+                    <table className="w-full text-left border-collapse min-w-[800px]">
+                      <thead>
+                        <tr className="bg-madani-green text-white">
+                          <th className="p-3 text-sm">Student</th>
+                          <th className="p-3 text-sm">Father Name</th>
+                          <th className="p-3 text-sm">Course</th>
+                          <th className="p-3 text-sm">Phone</th>
+                          <th className="p-3 text-sm">Address</th>
+                          <th className="p-3 text-sm">Date</th>
+                          <th className="p-3 text-sm text-center">Action</th>
                         </tr>
-                      )) : (
-                        <tr>
-                          <td colSpan={7} className="p-10 text-center text-slate-400 italic">No admissions yet.</td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {admissions.length > 0 ? admissions.map((adm) => (
+                          <tr key={adm.id} className="border-b hover:bg-slate-50 transition-colors">
+                            <td className="p-3 text-sm font-bold text-madani-green">{adm.student_name}</td>
+                            <td className="p-3 text-sm text-slate-600">{adm.father_name}</td>
+                            <td className="p-3 text-sm font-medium">
+                              {adm.course}
+                              {adm.selectedClass && (
+                                <span className="block text-[10px] text-madani-gold font-bold uppercase">Class: {adm.selectedClass}</span>
+                              )}
+                            </td>
+                            <td className="p-3 text-sm text-slate-600">{adm.phone}</td>
+                            <td className="p-3 text-sm text-slate-500 truncate max-w-[150px]">{adm.address}</td>
+                            <td className="p-3 text-sm text-slate-400">
+                              {adm.submittedAt?.toDate().toLocaleDateString() || 'Pending'}
+                            </td>
+                            <td className="p-3 text-center">
+                              <button 
+                                onClick={() => handleDeleteAdmission(adm.id)}
+                                className="p-2 text-red-500 hover:bg-red-50 rounded-full transition-colors"
+                                title="Delete Admission"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </td>
+                          </tr>
+                        )) : (
+                          <tr>
+                            <td colSpan={7} className="p-10 text-center text-slate-400 italic">No admissions yet.</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
-              </div>
+              )}
+
+              {adminTab === 'users' && (
+                <div className="animate-in fade-in duration-300">
+                  <h4 className="font-bold text-madani-green mb-4 flex items-center gap-2">
+                    <GraduationCap className="w-5 h-5" /> Registered Users ({allUsers.length})
+                  </h4>
+                  <div className="overflow-x-auto rounded-xl border border-slate-200 shadow-sm">
+                    <table className="w-full text-left border-collapse min-w-[600px]">
+                      <thead>
+                        <tr className="bg-madani-green text-white">
+                          <th className="p-3 text-sm">Name</th>
+                          <th className="p-3 text-sm">Email</th>
+                          <th className="p-3 text-sm">Role</th>
+                          <th className="p-3 text-sm">Joined</th>
+                          <th className="p-3 text-sm text-center">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {allUsers.length > 0 ? allUsers.map((u) => (
+                          <tr key={u.uid} className="border-b hover:bg-slate-50 transition-colors">
+                            <td className="p-3 text-sm font-bold text-slate-800">{u.name}</td>
+                            <td className="p-3 text-sm text-slate-600">{u.email}</td>
+                            <td className="p-3 text-sm">
+                              <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase border ${
+                                u.role === 'admin' ? 'bg-purple-100 text-purple-700 border-purple-200' :
+                                u.role === 'teacher' ? 'bg-blue-100 text-blue-700 border-blue-200' :
+                                'bg-emerald-100 text-emerald-700 border-emerald-200'
+                              }`}>
+                                {u.role || 'student'}
+                              </span>
+                            </td>
+                            <td className="p-3 text-sm text-slate-400">
+                              {u.createdAt?.toDate().toLocaleDateString() || 'N/A'}
+                            </td>
+                            <td className="p-3 text-center">
+                              {u.email !== "arushafatima748@gmail.com" && (
+                                <div className="flex items-center justify-center gap-2">
+                                  {u.role !== 'teacher' && (
+                                    <button 
+                                      onClick={() => updateUserRole(u.uid, 'teacher')}
+                                      className="px-3 py-1 bg-blue-600 text-white text-[10px] font-bold rounded-full hover:bg-blue-700 transition-all"
+                                    >
+                                      Make Teacher
+                                    </button>
+                                  )}
+                                  {u.role === 'teacher' && (
+                                    <button 
+                                      onClick={() => updateUserRole(u.uid, 'student')}
+                                      className="px-3 py-1 bg-slate-400 text-white text-[10px] font-bold rounded-full hover:bg-slate-500 transition-all"
+                                    >
+                                      Make Student
+                                    </button>
+                                  )}
+                                </div>
+                              )}
+                            </td>
+                          </tr>
+                        )) : (
+                          <tr>
+                            <td colSpan={5} className="p-10 text-center text-slate-400 italic">No users registered yet.</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
             </motion.div>
           </div>
         )}
