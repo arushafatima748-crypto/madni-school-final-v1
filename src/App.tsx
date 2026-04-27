@@ -117,6 +117,9 @@ export default function App() {
   // Auth State
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [userProfile, setUserProfile] = useState<any>(null);
+  // A teacher is a user with role 'teacher' or 'admin'
+  const canManageReports = isAdmin || userProfile?.role === 'teacher' || userProfile?.role === 'admin';
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
   const [showPassword, setShowPassword] = useState(false);
@@ -174,7 +177,6 @@ export default function App() {
   const [newCourse, setNewCourse] = useState({ name: '', description: '' });
   const [isSubmittingAdmin, setIsSubmittingAdmin] = useState(false);
   const [showCourseSelection, setShowCourseSelection] = useState(false);
-  const [userProfile, setUserProfile] = useState<any>(null);
   const [selectionSuccess, setSelectionSuccess] = useState(false);
   const [pendingCourse, setPendingCourse] = useState<string | null>(null);
   const [isSelectingCourse, setIsSelectingCourse] = useState(false);
@@ -317,7 +319,7 @@ export default function App() {
 
     const reportsRef = collection(db, 'progress_reports');
     // We use a simpler query first to avoid index requirement issues in dev
-    const qProgress = isAdmin 
+    const qProgress = canManageReports 
       ? query(reportsRef, orderBy('createdAt', 'desc'))
       : query(reportsRef, where('studentId', '==', user.uid));
     
@@ -533,7 +535,10 @@ export default function App() {
   // --- Course Selection Handler ---
   const handleAddProgressReport = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!isAdmin) return;
+    if (!canManageReports) {
+      alert("Only teachers or admins can add reports.");
+      return;
+    }
     setIsSubmittingAdmin(true);
     try {
       await addDoc(collection(db, 'progress_reports'), {
@@ -998,7 +1003,7 @@ export default function App() {
               },
               { 
                 icon: FileText, 
-                title: user && user.email === "arushafatima748@gmail.com" ? 'Manage Reports' : 'My Progress', 
+                title: canManageReports ? 'Manage Reports' : 'My Progress', 
                 gradient: 'from-violet-400 to-purple-600', 
                 action: () => setShowProgressReports(true) 
               },
@@ -1793,12 +1798,12 @@ export default function App() {
               <div className="flex justify-between items-center mb-6">
                 <div>
                   <h3 className="text-2xl font-bold text-madani-green">
-                    {isAdmin ? "Manage Progress Reports" : "My Progress Reports"}
+                    {canManageReports ? "Manage Progress Reports" : "My Progress Reports"}
                   </h3>
                   <p className="text-slate-500 text-sm">Track monthly progress and evaluations</p>
                 </div>
                 <div className="flex items-center gap-3">
-                  {isAdmin && (
+                  {canManageReports && (
                     <button 
                       onClick={() => setShowAddReport(true)}
                       className="bg-madani-green text-white px-4 py-2 rounded-full text-xs font-bold hover:bg-madani-gold hover:text-madani-green transition-all shadow-md flex items-center gap-2"
@@ -1887,7 +1892,7 @@ export default function App() {
                       </div>
                       <div className="flex justify-between items-center pt-2 border-t border-emerald-100">
                         <span className="text-[10px] text-slate-400">Issued: {report.createdAt?.toDate().toLocaleDateString() || 'Recently'}</span>
-                        {isAdmin && (
+                        {canManageReports && (
                           <button 
                             onClick={async () => {
                               if (confirm('Are you sure you want to delete this report?')) {
@@ -1907,7 +1912,7 @@ export default function App() {
                 <div className="text-center py-20 bg-slate-50 rounded-3xl border-2 border-dashed border-slate-200">
                   <FileText className="w-16 h-16 text-slate-300 mx-auto mb-4" />
                   <p className="text-slate-500 font-medium">No progress reports found yet.</p>
-                  {isAdmin && (
+                  {canManageReports && (
                     <button 
                       onClick={() => setShowAddReport(true)}
                       className="mt-4 text-madani-green font-bold hover:underline"
