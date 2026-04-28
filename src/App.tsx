@@ -174,7 +174,7 @@ export default function App() {
   // Admin Panel State
   const [admissions, setAdmissions] = useState<any[]>([]);
   const [allUsers, setAllUsers] = useState<any[]>([]);
-  const [adminTab, setAdminTab] = useState<'admissions' | 'news' | 'courses' | 'users'>('admissions');
+  const [adminTab, setAdminTab] = useState<'admissions' | 'news' | 'users' | 'reports'>('admissions');
   const [showAdminPanel, setShowAdminPanel] = useState(false);
   const [newNews, setNewNews] = useState({ title: '', description: '', icon: 'newspaper' });
   const [newCourse, setNewCourse] = useState({ name: '', description: '' });
@@ -185,7 +185,16 @@ export default function App() {
   const [isSelectingCourse, setIsSelectingCourse] = useState(false);
   const [isCoursesLoading, setIsCoursesLoading] = useState(true);
 
-  const [isFromCourseSelection, setIsFromCourseSelection] = useState(false);
+  // Effect to set default admin tab
+  useEffect(() => {
+    if (showAdminPanel) {
+      if (!isAdmin && userProfile?.role === 'teacher') {
+        setAdminTab('reports');
+      } else if (isAdmin) {
+        setAdminTab('admissions');
+      }
+    }
+  }, [showAdminPanel, isAdmin, userProfile]);
 
   // Progress Report State
   const [progressReports, setProgressReports] = useState<ProgressReportItem[]>([]);
@@ -246,7 +255,7 @@ export default function App() {
         setTimeout(async () => {
           await handleSelectCourse(courseToSelect, currentUser);
         }, 500);
-      } else if (profileData && !profileData.selectedCourse && currentUser.email !== "arushafatima748@gmail.com") {
+      } else if (profileData && !profileData.selectedCourse && currentUser.email !== "arushafatima748@gmail.com" && profileData.role !== 'teacher') {
         openCourseSelection();
       }
     } catch (error) {
@@ -871,12 +880,12 @@ export default function App() {
               </button>
               
               <div className="flex items-center gap-2 sm:gap-4">
-                {isAdmin && (
+                {canManageReports && (
                   <button 
                     onClick={() => setShowAdminPanel(true)}
                     className="flex items-center gap-2 bg-madani-gold text-madani-green px-4 py-2 rounded-full text-xs font-bold hover:bg-madani-light-gold transition-all shadow-md"
                   >
-                    <ShieldCheck className="w-4 h-4" /> <span className="hidden sm:inline">Admin Panel</span>
+                    <ShieldCheck className="w-4 h-4" /> <span className="hidden sm:inline">{isAdmin ? "Admin Panel" : "Teacher Dashboard"}</span>
                   </button>
                 )}
                 
@@ -1319,12 +1328,14 @@ export default function App() {
               exit={{ scale: 0.9, opacity: 0, y: 20 }} 
               className="bg-white rounded-[2rem] sm:rounded-[2.5rem] p-6 sm:p-8 max-w-lg w-full shadow-2xl border-4 border-madani-gold relative z-10 max-h-[90vh] overflow-y-auto"
             >
-              <button 
-                onClick={() => { setShowCourseSelection(false); setSelectionSuccess(false); }}
-                className="absolute right-4 top-4 sm:right-6 sm:top-6 p-2 hover:bg-slate-100 rounded-full text-slate-400 hover:text-madani-green transition-colors z-20"
-              >
-                <X className="w-6 h-6" />
-              </button>
+              {(!user || userProfile?.selectedCourse || isAdmin || userProfile?.role === 'teacher') && (
+                <button 
+                  onClick={() => { setShowCourseSelection(false); setSelectionSuccess(false); }}
+                  className="absolute right-4 top-4 sm:right-6 sm:top-6 p-2 hover:bg-slate-100 rounded-full text-slate-400 hover:text-madani-green transition-colors z-20"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              )}
               {selectionSuccess ? (
                 <div className="text-center py-8">
                   <div className="w-24 h-24 rounded-full bg-emerald-100 mx-auto mb-6 flex items-center justify-center text-emerald-600 border-4 border-emerald-200">
@@ -1454,10 +1465,11 @@ export default function App() {
               {/* Admin Tabs */}
               <div className="flex border-b border-slate-200 mb-6 overflow-x-auto">
                 {[
-                  { id: 'admissions', label: 'Admissions', icon: UserPlus },
-                  { id: 'news', label: 'News & Courses', icon: Newspaper },
-                  { id: 'users', label: 'User Management', icon: GraduationCap }
-                ].map((tab) => (
+                  { id: 'admissions', label: 'Admissions', icon: UserPlus, adminOnly: true },
+                  { id: 'reports', label: 'Student Reports', icon: FileText, adminOnly: false },
+                  { id: 'news', label: 'News & Courses', icon: Newspaper, adminOnly: true },
+                  { id: 'users', label: 'User Management', icon: GraduationCap, adminOnly: true }
+                ].filter(tab => !tab.adminOnly || isAdmin).map((tab) => (
                   <button
                     key={tab.id}
                     onClick={() => setAdminTab(tab.id as any)}
@@ -1472,6 +1484,72 @@ export default function App() {
                   </button>
                 ))}
               </div>
+
+              {adminTab === 'reports' && (
+                <div className="animate-in fade-in duration-300">
+                  <div className="flex justify-between items-center mb-6">
+                    <h4 className="font-bold text-madani-green flex items-center gap-2">
+                      <FileText className="w-5 h-5" /> Manage Progress Reports
+                    </h4>
+                    <button 
+                      onClick={() => setShowAddReport(true)}
+                      className="bg-madani-green text-white px-6 py-2 rounded-full font-bold text-xs hover:bg-madani-gold hover:text-madani-green transition-all shadow-md"
+                    >
+                      + Add New Report
+                    </button>
+                  </div>
+                  
+                  {isReportsLoading ? (
+                    <div className="text-center py-12">
+                      <Loader2 className="w-8 h-8 animate-spin mx-auto text-madani-gold mb-4" />
+                      <p className="text-slate-500">Loading reports...</p>
+                    </div>
+                  ) : progressReports.length > 0 ? (
+                    <div className="grid gap-4">
+                      {progressReports.map((report) => (
+                        <div key={report._id} className="bg-slate-50 border border-slate-200 p-4 rounded-2xl flex justify-between items-center hover:shadow-md transition-all">
+                          <div>
+                            <h5 className="font-bold text-madani-green">{report.studentName}</h5>
+                            <p className="text-xs text-slate-500">{report.month} {report.year} • Attendance: {report.attendance}%</p>
+                          </div>
+                          <div className="flex gap-2">
+                            <button 
+                              onClick={() => {
+                                // Logic to view report
+                                setSelectedItem({ 
+                                  title: `Progress Report: ${report.studentName}`, 
+                                  text: `Month: ${report.month} ${report.year}\nAttendance: ${report.attendance}%\nQuran: ${report.quranProgress}\nAcademic: ${report.academicProgress}\nBehavior: ${report.behavior}\nRemarks: ${report.teacherRemarks}` 
+                                });
+                              }}
+                              className="p-2 text-madani-green hover:bg-white rounded-full transition-all"
+                            >
+                              <Eye className="w-4 h-4" />
+                            </button>
+                            <button 
+                              onClick={async () => {
+                                if (window.confirm("Delete this report?")) {
+                                  try {
+                                    await deleteDoc(doc(db, 'progress_reports', report._id));
+                                  } catch (err) {
+                                    alert("Error deleting report");
+                                  }
+                                }
+                              }}
+                              className="p-2 text-red-500 hover:bg-white rounded-full transition-all"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-12 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200">
+                      <p className="text-slate-400 italic">No reports found.</p>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {adminTab === 'news' && (
                 <div className="grid md:grid-cols-2 gap-8 animate-in fade-in duration-300">

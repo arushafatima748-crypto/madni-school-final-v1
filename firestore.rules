@@ -86,7 +86,11 @@ service cloud.firestore {
     }
 
     function isTeacherOrAdmin() {
-      return isAdmin() || isTeacher();
+      return isAdmin() || (
+        isAuthenticated() && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'teacher'
+      );
     }
 
     function hasRequiredFields(fields) {
